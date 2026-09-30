@@ -1,74 +1,36 @@
-# Обязательный порядок работы с изменениями
+# SpaceNavSim Agent Rules
 
-## Никаких изменений без явного «делай»
+## Approval gate
 
-Для этого проекта действует строгий порядок: **обсуждение → предложение правки → согласование → выполнение**.
+- Workflow: discuss -> propose -> agree -> execute.
+- Until the user explicitly writes the Russian command represented by Unicode code points U+0434 U+0435 U+043B U+0430 U+0439 (case-insensitive), perform read-only work only: inspect, diagnose, analyze, answer, and propose. Requests, problem descriptions, and other imperative wording do not authorize implementation.
+- Before requesting that command, specify every proposed filesystem operation with its exact path; any affected classes, Blueprints, maps, assets, or settings; the behavior change and reason; the checks to perform; and the exact journal file to create or append.
+- That command authorizes only the already proposed scope. Do not add adjacent work. Blueprint, map, Data Asset, build, and editor actions require explicit inclusion in the agreed scope.
+- If the user revises or discusses a proposal without that command, update the proposal and remain read-only.
+- Before approval, do not create, edit, delete, or move files; change code, assets, configuration, plugins, or editor settings; run processes that change state; mutate Git state; deploy; send messages; or modify external services.
 
-Пока пользователь явно не написал команду **«делай»**, агенту разрешены только действия без изменения состояния: чтение кода, файлов и логов, диагностика, анализ, ответы на вопросы, описание вариантов и подготовка плана. Описание желаемого результата, проблемы или идеи **не является** разрешением на реализацию.
+## Paths
 
-До команды «делай» запрещено:
+- If a destination directory is unspecified, ask before creating, moving, or splitting files. Do not infer a folder layout.
+- List exact paths for every filesystem operation before approval. Approval applies only to listed operations.
 
-- редактировать, создавать, удалять или перемещать любые файлы;
-- изменять C++, Blueprint, карты, Data Asset, конфигурацию, плагины и настройки редактора;
-- запускать сборку, тесты, Unreal Editor, PIE, упаковку, генерацию проектов или другие процессы, меняющие состояние;
-- выполнять Git-операции с изменением состояния, включая staging, commit, branch, rebase, reset, pull и push;
-- выполнять внешние действия, деплой, отправку сообщений или изменять данные сторонних сервисов.
+## Builds and Unreal Editor
 
-Перед запросом на согласование агент обязан кратко и конкретно предложить:
+- Do not initiate or add builds, tests, project generation, packaging, Unreal Editor, PIE, or Standalone Game to a plan on your own.
+- A general approval command does not authorize these actions. Run only the specific operation the user separately and explicitly requested within the agreed scope.
+- If such an operation is necessary, explain why and wait for the direct request.
 
-1. какие именно файлы, классы, Blueprint или настройки будут изменены;
-2. какое поведение изменится и почему;
-3. что будет проверено. Сборку или запуск редактора указывать только если они прямо поручены пользователем либо отдельно предлагаются как необходимая проверка; не повторять формулировку, что они не будут запускаться.
+## Language and logs
 
-Команда «делай» разрешает только уже предложенный и согласованный объём. Она не разрешает добавлять смежные изменения по инициативе агента. Blueprint, карты, Data Asset, сборка и запуск редактора должны быть прямо перечислены в согласованном плане; если их нет в плане, их изменять или запускать нельзя.
+- Communicate with the user in Russian. Use English only in every agent-authored project file: names, identifiers, comments, strings, documentation, configuration, and journals. Never introduce Cyrillic characters into project files.
+- All UE_LOG message text and other runtime/debug log text must be in English.
+- Record every completed change in its related Logs/SpaceNavSim/<scenario>/ journal. Use concise English bullets covering changed files or settings, behavior change, performed checks, and whether a build or editor check ran. Work is incomplete until the entry exists.
+- Before requesting approval, name the exact journal file. Creating a new journal requires the same approval as any other file.
 
-Если пользователь изменяет, уточняет или обсуждает предложение без слова «делай», агент должен продолжать обсуждение и обновить план, но не начинать выполнение. Формулировки вроде «хочу», «нужно», «надо», «можно», «было бы хорошо», «почини» или описание желаемого результата не заменяют явного согласования командой «делай».
+## Editable Actor settings
 
-## File paths
-
-If the target directory is not explicitly specified, ask before creating, moving, or splitting files. Never infer a folder structure.
-
-Before approval, list every filesystem operation with its exact path. “Do it” authorizes only those listed operations.
-
-## Сборка и Unreal Editor — только по прямому запросу пользователя
-
-Агент **не включает по собственной инициативе** в планы и не запускает:
-
-- сборку, тесты, генерацию проектов, упаковку и другие процессы сборки;
-- Unreal Editor, PIE, Standalone Game и любые проверки через редактор.
-
-Общая команда «делай» не разрешает эти действия, даже если они обычно нужны для проверки. Они допустимы только когда пользователь прямо и отдельно указал их в согласованном объёме — например: «делай и собери» или «делай и запусти Unreal Editor».
-
-Если без такой операции нельзя надёжно продолжить работу, агент может объяснить её необходимость и предложить пользователю выполнить её, но обязан дождаться прямого указания. Прямая команда разрешает только названную операцию и не разрешает запускать другие процессы из этого списка.
-
-## Settings в Details для настраиваемых свойств Actor
-
-### Обязательный формат пользовательских настроек
-
-Все поля Actor, которые должен настраивать геймдизайнер, левел-дизайнер, художник или другой не-программист, обязаны находиться в Details в категории формата `Settings|Подтема`.
-
-- Правило распространяется на C++-свойства с доступом к редактированию (`EditAnywhere`, `EditDefaultsOnly`, `EditInstanceOnly` и эквиваленты) и на редактируемые Blueprint-переменные.
-- Использовать только полный путь `Category="Settings|…"`: например, `Settings|Input`, `Settings|Data`, `Settings|Niagara`, `Settings|SFX`, `Settings|Feedback`, `Settings|Movement`, `Settings|Debug` или `Settings|Progress`.
-- Каждая подтема описывает назначение настройки, а не её тип. Например, скорость и режим движения находятся в `Settings|Movement`, а кнопки и последовательности ввода — в `Settings|Input`.
-- Нельзя создавать для таких полей отдельные верхнеуровневые категории `Input`, `Setup`, `Data`, `SFX` и подобные; нельзя оставлять пользовательское поле без `Category`; нельзя использовать одиночную категорию `Settings` без подтемы.
-- В одной механике одинаковые по назначению настройки должны использовать одинаковый полный путь категории. При изменении существующего Actor его прежние пользовательские категории необходимо привести к этому формату, если это входит в область правки.
-
-### Приоритет и видимость Settings
-
-Каждый C++ Actor-класс, который показывает пользовательские настройки в Details, обязан задавать в `UCLASS` метаданные `PrioritizeCategories` с **полными путями всех своих отображаемых Settings-категорий**.
-
-- Правильный пример: `meta=(PrioritizeCategories="Settings|Input Settings|Validation Settings|Feedback")`.
-- Неправильный пример: `meta=(PrioritizeCategories="Settings")`. Unreal Engine сопоставляет приоритет с полным путём категории, поэтому `Settings` не поднимет `Settings|Input`.
-- При добавлении, переименовании или удалении `Settings|Подтема` одновременно обновлять `PrioritizeCategories`. Производный C++ Actor также должен объявлять полный список своих и унаследованных отображаемых `Settings|…`-категорий, если он используется как базовый класс Blueprint.
-- Это правило нужно применять и при создании новых Actor, и при доработке существующих похожих Actor. Цель: `Settings` всегда виден высоко в Class Defaults и находится раньше обычных категорий пользовательских свойств.
-- `Transform` и `Materials` могут оставаться выше: это служебные секции, которые Unreal Engine формирует для компонентов. Их точную позицию метаданными Actor гарантировать нельзя.
-
-### Технические поля
-
-Компоненты, runtime-состояние, реплицируемые информационные поля и делегаты, не являющиеся пользовательскими игровыми настройками, должны находиться в технических категориях вида `ИмяКласса|Components`, `ИмяКласса|Runtime` или `ИмяКласса|Events`, а не в `Settings`. Это предотвращает появление в поиске `Settings` чужих Transform, Materials, Tick и других служебных свойств компонентов.
-
-## Обязательное конспектирование изменений
-
-Каждое выполненное изменение должно быть внесено в относящийся к нему журнал `Logs/SpaceNavSim/<сценарий>/`. Работа не считается завершённой, пока в журнале нет краткой записи: какие файлы или настройки изменены, какое поведение изменилось и была ли выполнена сборка или проверка в редакторе.
-
-Перед запросом команды «делай» агент обязан назвать конкретный файл журнала, который будет дополнен. Если подходящего журнала нет, его создание также должно быть явно предложено и согласовано. Без «делай» агент не создаёт и не изменяет журналы так же, как и любой другой файл проекта.
+- Every designer-editable Actor field, including editable C++ properties and Blueprint variables, belongs to a purpose-based Details category with the full path Settings|Topic (for example Settings|Input, Settings|Data, Settings|Movement, Settings|SFX, or Settings|Debug).
+- Do not use a bare Settings category, an unrelated top-level category, or no category. Keep equivalent settings in the same mechanic under the same full path. When an existing Actor is in scope, align its old user-facing categories with this convention.
+- Every C++ Actor with displayed settings must declare UCLASS PrioritizeCategories with every full displayed Settings|Topic path. Update it when categories change. A derived C++ Actor used as a Blueprint base must include its own and inherited displayed Settings paths.
+- Transform and Materials are engine component sections and may remain above Settings; Actor metadata cannot guarantee their positions.
+- Components, runtime state, replicated informational fields, and delegates that are not designer settings belong in technical categories such as ClassName|Components, ClassName|Runtime, or ClassName|Events, never Settings.
