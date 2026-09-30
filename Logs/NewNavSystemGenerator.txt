@@ -1,0 +1,4 @@
+- Added USpaceNavSystemGeneratorDataAsset with seed, planet count, minimum orbital radius, system boundary, central body mass, and central body radius. System boundary defaults to 120 AU.
+- Added ASpaceNavSystemGenerator with one editable data asset reference under Settings|Data. No spawning or BeginPlay logic was added.
+- Updated AGENTS.md to require exact requested scope without inferred functionality.
+- Checked the created file layout and declarations. Build and Unreal Editor were not run.

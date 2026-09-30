@@ -2,7 +2,7 @@
 setlocal
 
 set "SCRIPT_NAME=BuildEditorSpaceNavSim"
-if not defined UE_ROOT set "UE_ROOT=E:\UE57"
+set "UE_ROOT=C:\UE_Engines\UE_5.7"
 
 set "PROJECT=%~dp0SpaceNavSim.uproject"
 set "TARGET=SpaceNavSimEditor"
