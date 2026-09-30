@@ -1,0 +1,26 @@
+# Unreal Engine generated data
+/Binaries/
+/DerivedDataCache/
+/Intermediate/
+/Saved/
+/Plugins/**/Binaries/
+/Plugins/**/Intermediate/
+/Plugins/**/Saved/
+
+# IDE and generated solution files
+/.vs/
+/.idea/
+/.vscode/
+/*.sln
+/*.slnx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.sdf
+*.opensdf
+*.ipch
+
+# Keep project sources, configuration, scripts, content assets and Logs tracked.

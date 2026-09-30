@@ -1,0 +1,7 @@
+* text=auto
+
+# Unreal assets are binary and must not be line-ending converted or text-merged.
+*.uasset binary
+*.umap binary
+*.ubulk binary
+*.uptnl binary
