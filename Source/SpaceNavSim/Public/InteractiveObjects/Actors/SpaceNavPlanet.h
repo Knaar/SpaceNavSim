@@ -15,21 +15,35 @@ class SPACENAVSIM_API ASpaceNavPlanet : public AActor
 public:
 	ASpaceNavPlanet();
 
-	void InitializePlanet(double InMassEarth, double InRadiusEarth, double InOrbitalRadiusAU,
-		double InInitialOrbitalPhaseDegrees, UMaterialInterface* InMaterial);
+	void InitializePlanet(double InMassTonnes, double InRadiusMeters, double InOrbitalRadiusKm,
+		double InInitialOrbitalPhaseDegrees, const FVector& InInitialOrbitalVelocityMetersPerSecond,
+		UMaterialInterface* InMaterial);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPlanet|Components")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavPlanet|Runtime")
-	double MassEarth = 0.0;
+	double MassTonnes = 0.0;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavPlanet|Runtime")
-	double RadiusEarth = 0.0;
+	double RadiusMeters = 0.0;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavPlanet|Runtime")
-	double OrbitalRadiusAU = 0.0;
+	double OrbitalRadiusKm = 0.0;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavPlanet|Runtime")
 	double InitialOrbitalPhaseDegrees = 0.0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavPlanet|Runtime")
+	FVector InitialOrbitalVelocityMetersPerSecond = FVector::ZeroVector;
+
+protected:
+	virtual void PostInitializeComponents() override;
+
+private:
+	void ApplyVisualRadius();
+	void ApplyPlanetMaterial();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> SelectedMaterial;
 };

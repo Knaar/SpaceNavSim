@@ -5,6 +5,7 @@
 #include "SpaceNavCentralBody.generated.h"
 
 class UStaticMeshComponent;
+class UPointLightComponent;
 
 UCLASS(Blueprintable)
 class SPACENAVSIM_API ASpaceNavCentralBody : public AActor
@@ -14,14 +15,23 @@ class SPACENAVSIM_API ASpaceNavCentralBody : public AActor
 public:
 	ASpaceNavCentralBody();
 
-	void InitializeBody(double InMassEarth, double InRadiusEarth);
+	void InitializeBody(double InMassTonnes, double InRadiusMeters);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavCentralBody|Components")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavCentralBody|Runtime")
-	double MassEarth = 0.0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavCentralBody|Components")
+	TObjectPtr<UPointLightComponent> StarLight;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavCentralBody|Runtime")
-	double RadiusEarth = 0.0;
+	double MassTonnes = 0.0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "SpaceNavCentralBody|Runtime")
+	double RadiusMeters = 0.0;
+
+protected:
+	virtual void PostInitializeComponents() override;
+
+private:
+	void ApplyVisualRadius();
 };

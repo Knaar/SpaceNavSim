@@ -22,13 +22,16 @@ ASpaceNavPawn::ASpaceNavPawn()
 	ShipMesh->SetupAttachment(SceneRoot);
 	ShipMesh->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
 	ShipMesh->SetRelativeScale3D(FVector(0.5, 0.5, 1.0));
+	ShipMesh->SetCastShadow(false);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> shipMeshAsset(TEXT("/Engine/BasicShapes/Cone.Cone"));
 	if (shipMeshAsset.Succeeded()) ShipMesh->SetStaticMesh(shipMeshAsset.Object);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
-	CameraBoom->SetupAttachment(SceneRoot);
+	CameraBoom->SetupAttachment(ShipMesh);
+	CameraBoom->SetAbsolute(false, false, true);
 	CameraBoom->TargetArmLength = 300.0f;
 	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bDoCollisionTest = false;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -44,6 +47,12 @@ ASpaceNavPawn::ASpaceNavPawn()
 void ASpaceNavPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	if (!bInputSetupLogged && Controller != nullptr)
+	{
+		const FRotator currentRotation = Controller->GetControlRotation();
+		Controller->SetControlRotation(FRotator(-15.0f, currentRotation.Yaw, 0.0f));
+	}
 
 	if (!bInputSetupLogged) LogInput(TEXT("Started"));
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ASpaceNavPawn::MoveForward);

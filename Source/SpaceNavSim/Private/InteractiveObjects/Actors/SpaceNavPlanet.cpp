@@ -1,6 +1,7 @@
 #include "InteractiveObjects/Actors/SpaceNavPlanet.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 
 ASpaceNavPlanet::ASpaceNavPlanet()
 {
@@ -8,16 +9,42 @@ ASpaceNavPlanet::ASpaceNavPlanet()
 	SetRootComponent(BodyMesh);
 }
 
-void ASpaceNavPlanet::InitializePlanet(double InMassEarth, double InRadiusEarth, double InOrbitalRadiusAU,
-	double InInitialOrbitalPhaseDegrees, UMaterialInterface* InMaterial)
+void ASpaceNavPlanet::InitializePlanet(double InMassTonnes, double InRadiusMeters, double InOrbitalRadiusKm,
+	double InInitialOrbitalPhaseDegrees, const FVector& InInitialOrbitalVelocityMetersPerSecond,
+	UMaterialInterface* InMaterial)
 {
-	MassEarth = InMassEarth;
-	RadiusEarth = InRadiusEarth;
-	OrbitalRadiusAU = InOrbitalRadiusAU;
+	MassTonnes = InMassTonnes;
+	RadiusMeters = InRadiusMeters;
+	OrbitalRadiusKm = InOrbitalRadiusKm;
 	InitialOrbitalPhaseDegrees = InInitialOrbitalPhaseDegrees;
+	InitialOrbitalVelocityMetersPerSecond = InInitialOrbitalVelocityMetersPerSecond;
+	SelectedMaterial = InMaterial;
+	ApplyPlanetMaterial();
+}
 
-	if (InMaterial != nullptr)
+void ASpaceNavPlanet::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	ApplyVisualRadius();
+	ApplyPlanetMaterial();
+}
+
+void ASpaceNavPlanet::ApplyVisualRadius()
+{
+	if (BodyMesh == nullptr || !FMath::IsFinite(RadiusMeters) || RadiusMeters <= 0.0) return;
+	const UStaticMesh* staticMesh = BodyMesh->GetStaticMesh();
+	if (staticMesh == nullptr) return;
+	const double meshRadiusUU = staticMesh->GetBounds().SphereRadius;
+	if (meshRadiusUU <= 0.0) return;
+
+	constexpr double UnrealUnitsPerMeter = 100.0;
+	BodyMesh->SetWorldScale3D(FVector(RadiusMeters * UnrealUnitsPerMeter / meshRadiusUU));
+}
+
+void ASpaceNavPlanet::ApplyPlanetMaterial()
+{
+	if (SelectedMaterial != nullptr)
 	{
-		BodyMesh->SetMaterial(0, InMaterial);
+		BodyMesh->SetMaterial(0, SelectedMaterial.Get());
 	}
 }
