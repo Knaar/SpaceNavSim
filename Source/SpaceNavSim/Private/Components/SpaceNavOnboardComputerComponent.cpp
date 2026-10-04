@@ -1,6 +1,10 @@
 #include "Components/SpaceNavOnboardComputerComponent.h"
 
+#include "Components/SpaceNavResourceStoreComponent.h"
+#include "Game/Pawn/SpaceNavPawnSettingsDataAsset.h"
 #include "GameFramework/Actor.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogSpaceNavOnboardComputer, Log, All);
 
 namespace
 {
@@ -25,6 +29,7 @@ void USpaceNavOnboardComputerComponent::InitOnboardComputer(float SamplePeriodSe
 	PreviousFuelKg = 0.0f;
 	bHasFuelSample = false;
 	SetComponentTickEnabled(true);
+	InitializeMassTracking();
 }
 
 void USpaceNavOnboardComputerComponent::HandleFuelChanged(float RemainingFuelKg)
@@ -64,6 +69,45 @@ void USpaceNavOnboardComputerComponent::TickComponent(float DeltaTime, ELevelTic
 	OnSpeedUpdated.Broadcast(static_cast<float>(AccumulatedDistanceCm / ElapsedSeconds));
 	AccumulatedDistanceCm = 0.0;
 	ElapsedSeconds = 0.0;
+}
+
+void USpaceNavOnboardComputerComponent::InitializeMassTracking()
+{
+	if (ResourceStore.IsValid()) ResourceStore->OnFuelAmountChanged.RemoveAll(this);
+	ResourceStore = GetOwner()->FindComponentByClass<USpaceNavResourceStoreComponent>();
+	bHasSpacecraftMassSample = false;
+	if (!CheckMassResources()) return;
+
+	ResourceStore->OnFuelAmountChanged.AddUObject(this,
+		&USpaceNavOnboardComputerComponent::HandleFuelAmountChanged);
+	HandleFuelAmountChanged(ResourceStore->Resources.Fuel);
+}
+
+void USpaceNavOnboardComputerComponent::HandleFuelAmountChanged(float RemainingFuelKg)
+{
+	if (!CheckMassResources()) return;
+	const double currentSpacecraftMassKg =
+		static_cast<double>(ResourceStore->PawnSettings->DryMassKg) + RemainingFuelKg;
+	if (bHasSpacecraftMassSample && currentSpacecraftMassKg == PreviousSpacecraftMassKg) return;
+
+	PreviousSpacecraftMassKg = currentSpacecraftMassKg;
+	bHasSpacecraftMassSample = true;
+	OnSpacecraftMassChanged.Broadcast(currentSpacecraftMassKg);
+}
+
+bool USpaceNavOnboardComputerComponent::CheckMassResources() const
+{
+	if (!ResourceStore.IsValid())
+	{
+		UE_LOG(LogSpaceNavOnboardComputer, Warning, TEXT("Failed: mass resources"));
+		return false;
+	}
+	if (ResourceStore->PawnSettings == nullptr)
+	{
+		UE_LOG(LogSpaceNavOnboardComputer, Warning, TEXT("Failed: mass settings"));
+		return false;
+	}
+	return true;
 }
 
 void USpaceNavOnboardComputerComponent::UpdateDistance()

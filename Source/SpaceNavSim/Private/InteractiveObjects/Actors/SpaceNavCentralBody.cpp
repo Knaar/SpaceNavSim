@@ -35,6 +35,6 @@ void ASpaceNavCentralBody::ApplyVisualRadius()
 	const double meshRadiusUU = staticMesh->GetBounds().SphereRadius;
 	if (meshRadiusUU <= 0.0) return;
 
-	constexpr double UnrealUnitsPerMeter = 100.0;
-	BodyMesh->SetWorldScale3D(FVector(RadiusMeters * UnrealUnitsPerMeter / meshRadiusUU));
+	constexpr double centralBodyUnitsPerMeter = 100.0;
+	BodyMesh->SetWorldScale3D(FVector(RadiusMeters * centralBodyUnitsPerMeter / meshRadiusUU));
 }

@@ -101,6 +101,7 @@ namespace
 		double MassTonnes = 0.0;
 		double RadiusUU = 0.0;
 		double AvoidRadiusUU = 0.0;
+		double CriticalRadiusUU = 0.0;
 
 		FVector LocationAfter(double SecondsAhead) const;
 	};
@@ -121,6 +122,10 @@ namespace
 		int32 MaxGuideCandidates = 200;
 		int32 MaxDetailedCandidates = 32;
 		double MinimumRouteSeparationFraction = 0.02;
+		double CriticalBodyClearanceRadiusFraction = 0.6;
+		double ShipToPlanetSpeedFactor = 2.0;
+		double DesiredCorrectionFuelReserveFraction = 0.2;
+		double ManeuverVelocityErrorFraction = 0.01;
 		FSpaceNavRouteWeightSet ModeWeights[3];
 
 	};
@@ -217,6 +222,16 @@ namespace
 		double MinimumStarClearanceUU = TNumericLimits<double>::Max();
 		double MinimumPlanetClearanceUU = TNumericLimits<double>::Max();
 		double RiskCost = 0.0;
+		double DistanceRisk = 0.0;
+		double ApproachSpeedRisk = 0.0;
+		double SpeedAdvantageRisk = 0.0;
+		double ManeuverSensitivityRisk = 0.0;
+		double CorrectionFuelRisk = 0.0;
+		double MaximumManeuverDeviationUU = 0.0;
+		double MinimumManeuverMarginUU = TNumericLimits<double>::Max();
+		double RequiredCorrectionFuelKg = 0.0;
+		double AvailableCorrectionFuelKg = 0.0;
+		double DesiredCorrectionFuelKg = 0.0;
 	};
 
 	struct FSimulationFailure;
@@ -453,6 +468,10 @@ namespace
 	void LimitControlToFuel(FNavigationControl& Control, double AvailableFuelKg);
 	double CalculatePredictionReserveUU(double RadiusUU, double RelativeSpeedUUPerSecond,
 		double StepSeconds);
+	double CalculateBodyPredictionReserveUU(const FPlannerBody& Body, double RelativeSpeedUUPerSecond,
+		double StepSeconds);
+	double CalculateShipToPlanetSpeedRisk(const FPlannerContext& Context, const FPlannerBody& Body,
+		double ShipSpeedUUPerSecond);
 	double CalculateTurnReserveUU(double RadiusUU, double RelativeSpeedUUPerSecond,
 		const FEngineSnapshot& Engine);
 	FPredictedStateSample InterpolatePredictedState(const TArray<FPredictedStateSample>& Samples,
@@ -604,13 +623,13 @@ void USpaceNavRouteComponent::StartBackgroundSearch()
 		return;
 	}
 	FPlannerContext context;
+	SnapshotPredictionSettings(*OptimizationSettings, context);
 	if (!BuildPlannerContext(*pawn, *engine, *resources, targetLocation,
 		PawnSettings->PlanetSafetyBufferFraction, context))
 	{
 		failSearch();
 		return;
 	}
-	SnapshotPredictionSettings(*OptimizationSettings, context);
 	context.Obstacles = MoveTemp(obstacles);
 	context.EscapePoints = MoveTemp(escapePoints);
 	PausedEngine = engine;
@@ -625,6 +644,11 @@ void USpaceNavRouteComponent::StartBackgroundSearch()
 	{
 		UE_LOG(LogSpaceNavRoute, Display, TEXT("Physics ready: bodies=%d fuel=%.3f gravity=%.6g"),
 			context.Bodies.Num(), context.InitialFuelKg, context.GravityCoefficient);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Safety gap R %.3g"), PawnSettings->PlanetSafetyBufferFraction);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Critical gap R %.3g"), context.CriticalBodyClearanceRadiusFraction);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Speed factor %.3g"), context.ShipToPlanetSpeedFactor);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Error %% %.3g"), context.ManeuverVelocityErrorFraction * 100.0);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Fuel reserve %% %.3g"), context.DesiredCorrectionFuelReserveFraction * 100.0);
 	}
 	LogDisplay(TEXT("Search started"));
 	TWeakObjectPtr<USpaceNavRouteComponent> weakThis(this);
@@ -759,6 +783,7 @@ void USpaceNavRouteComponent::MoveRoad()
 	if (!CheckSettings()) { ResumeEngineAfterSearch(); return; }
 	const double validationStarted = FPlatformTime::Seconds();
 	FPlannerContext launchContext;
+	SnapshotPredictionSettings(*OptimizationSettings, launchContext);
 	if (!BuildPlannerContext(*pawn, *engine, *resources, GuidancePoints.Last(),
 		PawnSettings->PlanetSafetyBufferFraction, launchContext))
 	{
@@ -1110,7 +1135,10 @@ void EstimateCoarseCorridor(const FPlannerContext& Context, FCoarseCorridor& Cor
 		{
 			const double radius = FMath::Max(body.RadiusUU, body.AvoidRadiusUU);
 			const double centerDistance = FVector::Dist(segmentMiddle, body.LocationAfter(middleSeconds));
-			segmentRisk = FMath::Max(segmentRisk, radius / FMath::Max(radius, centerDistance));
+			const double distanceRisk = radius / FMath::Max(radius, centerDistance);
+			const double speedRisk = CalculateShipToPlanetSpeedRisk(Context, body, cruiseSpeed);
+			segmentRisk = FMath::Max(segmentRisk, distanceRisk +
+				(1.0 - distanceRisk) * distanceRisk * speedRisk * 0.25);
 		}
 		accumulatedRisk += segmentRisk * segmentLength;
 		riskDistance += segmentLength;
@@ -1132,7 +1160,12 @@ void EstimateCoarseCorridor(const FPlannerContext& Context, FCoarseCorridor& Cor
 	}
 	Corridor.EstimatedFuelKg = estimatedFuelKg;
 	Corridor.EstimatedTimeSeconds = elapsedSeconds;
-	Corridor.EstimatedRiskCost = riskDistance > 0.0 ? accumulatedRisk / riskDistance : 0.0;
+	const double distanceRisk = riskDistance > 0.0 ? accumulatedRisk / riskDistance : 0.0;
+	const double desiredReserve = estimatedFuelKg * Context.DesiredCorrectionFuelReserveFraction;
+	const double availableReserve = FMath::Max(0.0, Context.InitialFuelKg - estimatedFuelKg);
+	const double reserveRisk = desiredReserve > 0.0
+		? (availableReserve > 0.0 ? FMath::Clamp(desiredReserve / availableReserve, 0.0, 1.0) : 1.0) : 0.0;
+	Corridor.EstimatedRiskCost = distanceRisk + (1.0 - distanceRisk) * reserveRisk * 0.25;
 }
 
 double GetCoarseCorridorCost(const FPlannerContext& Context, const FCoarseCorridor& Corridor)
@@ -1176,9 +1209,10 @@ bool FindCoarseEncounter(const FPlannerContext& Context, const FCoarseCorridor& 
 					FVector::DotProduct(center - start, segment) / lengthSquared, 0.0, 1.0) : 0.0;
 				const double arrivalSeconds = elapsedSeconds + segmentSeconds * fraction;
 				center = body.LocationAfter(arrivalSeconds);
-				const double radius = body.bPlanet
+				const double safetyRadius = body.bPlanet
 					? FMath::Max(body.RadiusUU, body.AvoidRadiusUU) + body.RadiusUU * MinimumBodyReserveFraction
 					: body.RadiusUU;
+				const double radius = FMath::Max(safetyRadius, body.CriticalRadiusUU);
 				if (FVector::DistSquared(start + segment * fraction, center) >= FMath::Square(radius)) continue;
 				if (fraction >= earliestFraction) continue;
 				earliestFraction = fraction;
@@ -1226,7 +1260,7 @@ bool HasFixedStarIntersection(const FPlannerContext& Context, const TArray<FVect
 			if (body.bPlanet) continue;
 			const double fraction = lengthSquared > 0.0 ? FMath::Clamp(
 				FVector::DotProduct(body.FixedCenter - start, segment) / lengthSquared, 0.0, 1.0) : 0.0;
-			const double radius = body.RadiusUU;
+			const double radius = body.RadiusUU + CalculateBodyPredictionReserveUU(body, 0.0, 0.0);
 			if (FVector::DistSquared(start + segment * fraction, body.FixedCenter) < FMath::Square(radius)) return true;
 		}
 	}
@@ -1258,7 +1292,8 @@ void SeedCoarseCorridors(const FPlannerContext& Context, EGuideStyle Style,
 		const double fraction = FMath::Clamp(FVector::DotProduct(body.FixedCenter - start, direct) /
 			direct.SizeSquared(), 0.0, 1.0);
 		const double gap = FVector::Dist(start + direct * fraction, body.FixedCenter);
-		if (gap < body.RadiusUU && blockingStar == nullptr) blockingStar = &body;
+		if (gap < body.RadiusUU + CalculateBodyPredictionReserveUU(body, 0.0, 0.0) &&
+			blockingStar == nullptr) blockingStar = &body;
 		if (gap > body.AvoidRadiusUU * 3.0) continue;
 		corridorWidth = FMath::Max(corridorWidth, body.AvoidRadiusUU * 2.0);
 	}
@@ -1268,7 +1303,8 @@ void SeedCoarseCorridors(const FPlannerContext& Context, EGuideStyle Style,
 	{
 		const FVector startOutward = (start - blockingStar->FixedCenter).GetSafeNormal();
 		const FVector targetOutward = (Context.Target - blockingStar->FixedCenter).GetSafeNormal();
-		const double radius = FMath::Max(corridorWidth, blockingStar->RadiusUU * 2.0);
+		const double radius = FMath::Max(corridorWidth,
+			(blockingStar->RadiusUU + CalculateBodyPredictionReserveUU(*blockingStar, 0.0, 0.0)) * 2.0);
 		for (const FVector& side : sides)
 		{
 			FCoarseCorridor& corridor = seeds.AddDefaulted_GetRef();
@@ -1938,6 +1974,24 @@ namespace
 			RelativeSpeedUUPerSecond * StepSeconds);
 	}
 
+	double CalculateBodyPredictionReserveUU(const FPlannerBody& Body, double RelativeSpeedUUPerSecond,
+		double StepSeconds)
+	{
+		return FMath::Max(CalculatePredictionReserveUU(Body.RadiusUU, RelativeSpeedUUPerSecond, StepSeconds),
+			FMath::Max(0.0, Body.CriticalRadiusUU - Body.RadiusUU));
+	}
+
+	double CalculateShipToPlanetSpeedRisk(const FPlannerContext& Context, const FPlannerBody& Body,
+		double ShipSpeedUUPerSecond)
+	{
+		if (!Body.bPlanet || Context.ShipToPlanetSpeedFactor <= 0.0) return 0.0;
+		const double planetSpeedUUPerSecond = FVector::CrossProduct(Body.Orbit.Axis.GetSafeNormal(),
+			Body.Orbit.InitialOffset).Size() * FMath::Abs(Body.Orbit.AngularSpeedRadiansPerSecond);
+		const double desiredSpeedUUPerSecond = planetSpeedUUPerSecond * Context.ShipToPlanetSpeedFactor;
+		return desiredSpeedUUPerSecond > 0.0
+			? FMath::Clamp(1.0 - ShipSpeedUUPerSecond / desiredSpeedUUPerSecond, 0.0, 1.0) : 0.0;
+	}
+
 	double CalculateTurnReserveUU(double RadiusUU, double RelativeSpeedUUPerSecond,
 		const FEngineSnapshot& Engine)
 	{
@@ -2077,6 +2131,7 @@ namespace
 			body.MassTonnes = bodyIterator->MassTonnes;
 			body.RadiusUU = bodyIterator->RadiusMeters * UnrealUnitsPerMeter;
 			body.AvoidRadiusUU = body.RadiusUU;
+			body.CriticalRadiusUU = body.RadiusUU * (1.0 + OutContext.CriticalBodyClearanceRadiusFraction);
 			if (!FMath::IsFinite(body.RadiusUU) || !FMath::IsFinite(body.MassTonnes) ||
 				body.RadiusUU <= 0.0 || body.MassTonnes <= 0.0)
 			{
@@ -2085,10 +2140,9 @@ namespace
 					*bodyIterator->GetName(), body.MassTonnes, body.RadiusUU);
 				return false;
 			}
-			if (FVector::Dist(Pawn.GetActorLocation(), body.FixedCenter) < body.RadiusUU)
+			if (FVector::Dist(Pawn.GetActorLocation(), body.FixedCenter) < body.CriticalRadiusUU)
 			{
-				UE_LOG(LogSpaceNavRoute, Error, TEXT("Failed: start inside central body %s"),
-					*bodyIterator->GetName());
+				UE_LOG(LogSpaceNavRoute, Error, TEXT("Start critical body %d"), OutContext.Bodies.Num());
 				return false;
 			}
 			OutContext.Bodies.Add(body);
@@ -2102,6 +2156,7 @@ namespace
 			body.MassTonnes = planetIterator->MassTonnes;
 			body.RadiusUU = planetIterator->RadiusMeters * UnrealUnitsPerMeter;
 			body.AvoidRadiusUU = body.RadiusUU * (1.0 + PlanetSafetyBufferFraction);
+			body.CriticalRadiusUU = body.RadiusUU * (1.0 + OutContext.CriticalBodyClearanceRadiusFraction);
 			if (!FMath::IsFinite(body.RadiusUU) || !FMath::IsFinite(body.AvoidRadiusUU) ||
 				!FMath::IsFinite(body.MassTonnes) || body.RadiusUU <= 0.0 ||
 				body.AvoidRadiusUU <= 0.0 || body.MassTonnes <= 0.0)
@@ -2112,10 +2167,9 @@ namespace
 				return false;
 			}
 			const double startDistance = FVector::Dist(Pawn.GetActorLocation(), body.LocationAfter(0.0));
-			if (startDistance < body.RadiusUU)
+			if (startDistance < body.CriticalRadiusUU)
 			{
-				UE_LOG(LogSpaceNavRoute, Error, TEXT("Failed: start inside planet %s"),
-					*planetIterator->GetName());
+				UE_LOG(LogSpaceNavRoute, Error, TEXT("Start critical body %d"), OutContext.Bodies.Num());
 				return false;
 			}
 			OutContext.Bodies.Add(body);
@@ -2536,17 +2590,66 @@ namespace
 		return true;
 	}
 
+	double EvaluateRouteBodyRisk(const FPlannerContext& Context, const FPlannerBody& Body,
+		const FNavigationState& Current, double MinimumDistanceUU, double RequiredGapUU,
+		double ClosingSpeedUUPerSecond, double ShipSpeedUUPerSecond, FRouteCandidate& Candidate)
+	{
+		const double escapeSpeed = UnrealUnitsPerMeter * FMath::Sqrt(2.0 *
+			Context.GravityCoefficient * Body.MassTonnes /
+			FMath::Max(1.0, Body.RadiusUU / UnrealUnitsPerMeter));
+		const double closingSpeedRisk = ClosingSpeedUUPerSecond /
+			FMath::Max(1.0, ClosingSpeedUUPerSecond + escapeSpeed);
+		const double speedAdvantageRisk = CalculateShipToPlanetSpeedRisk(Context, Body, ShipSpeedUUPerSecond);
+		const double speedFactor = closingSpeedRisk + (1.0 - closingSpeedRisk) * speedAdvantageRisk;
+		const double fuelFactor = Context.InitialFuelKg > 0.0
+			? 1.0 - Current.FuelKg / Context.InitialFuelKg : 1.0;
+		const double proximity = Body.bPlanet
+			? 1.0 / (1.0 + FMath::Square(MinimumDistanceUU / Body.AvoidRadiusUU))
+			: FMath::Square(Body.AvoidRadiusUU /
+				FMath::Max(Body.AvoidRadiusUU, MinimumDistanceUU));
+		const double marginUU = FMath::Max(0.0, MinimumDistanceUU - Body.RadiusUU - RequiredGapUU);
+		const double velocityErrorUUPerSecond = ShipSpeedUUPerSecond * Context.ManeuverVelocityErrorFraction;
+		// Use the fixed correction window for the single maneuver error estimate.
+		const double deviationUU = velocityErrorUUPerSecond * CorrectionWindowSeconds;
+		const double sensitivity = deviationUU > 0.0
+			? (marginUU > 0.0 ? FMath::Clamp(deviationUU / marginUU, 0.0, 1.0) : 1.0) : 0.0;
+		// Two ideal correction impulses restore both position and velocity.
+		const double correctionDeltaV = velocityErrorUUPerSecond +
+			2.0 * deviationUU / CorrectionWindowSeconds;
+		// Bound the sum of three axis fuel quotas; no correction fuel is actually spent here.
+		const double correctionFuelKg = FMath::Sqrt(3.0) * correctionDeltaV /
+			FMath::Max(UE_DOUBLE_SMALL_NUMBER, static_cast<double>(Context.Engine.ThrustAcceleration));
+		const double requiredReserveKg = FMath::Max(correctionFuelKg, Candidate.DesiredCorrectionFuelKg);
+		const double reserveRisk = requiredReserveKg > 0.0
+			? (Candidate.AvailableCorrectionFuelKg > 0.0
+				? FMath::Clamp(requiredReserveKg / Candidate.AvailableCorrectionFuelKg, 0.0, 1.0) : 1.0) : 0.0;
+		Candidate.DistanceRisk = FMath::Max(Candidate.DistanceRisk, proximity);
+		Candidate.ApproachSpeedRisk = FMath::Max(Candidate.ApproachSpeedRisk, proximity * speedFactor);
+		Candidate.SpeedAdvantageRisk = FMath::Max(Candidate.SpeedAdvantageRisk, proximity * speedAdvantageRisk);
+		Candidate.ManeuverSensitivityRisk = FMath::Max(Candidate.ManeuverSensitivityRisk, proximity * sensitivity);
+		Candidate.CorrectionFuelRisk = FMath::Max(Candidate.CorrectionFuelRisk, proximity * reserveRisk);
+		Candidate.MaximumManeuverDeviationUU = FMath::Max(Candidate.MaximumManeuverDeviationUU, deviationUU);
+		Candidate.MinimumManeuverMarginUU = FMath::Min(Candidate.MinimumManeuverMarginUU, marginUU);
+		Candidate.RequiredCorrectionFuelKg = FMath::Max(Candidate.RequiredCorrectionFuelKg, correctionFuelKg);
+		const double hazard = proximity * (0.5 + 0.25 * speedFactor + 0.25 * fuelFactor);
+		const double maneuverRisk = 1.0 - (1.0 - 0.5 * proximity * sensitivity) *
+			(1.0 - 0.5 * proximity * reserveRisk);
+		return FMath::Clamp(hazard + (1.0 - hazard) * maneuverRisk, 0.0, 1.0);
+	}
+
 	bool EvaluateSafetyAndRisk(const FNavigationState& Previous, const FNavigationState& Current,
 		const FPlannerContext& Context, const TArray<FVector>& PreviousBodyPositions,
 		const TArray<FVector>& CurrentBodyPositions, double& OutStepRisk, int32& OutBlockingBodyIndex,
 		double& OutMinimumStarClearanceUU, double& OutMinimumPlanetClearanceUU,
-		double& OutPhysicalGapUU, double& OutRequiredGapUU)
+		double& OutPhysicalGapUU, double& OutRequiredGapUU, FRouteCandidate& Candidate)
 	{
 		OutStepRisk = 0.0;
 		OutBlockingBodyIndex = INDEX_NONE;
 		OutPhysicalGapUU = 0.0;
 		OutRequiredGapUU = 0.0;
 		const double stepSeconds = Current.ElapsedSeconds - Previous.ElapsedSeconds;
+		const double shipSpeed = FMath::Max((Previous.EngineVelocity + Previous.GravityVelocity).Size(),
+			(Current.EngineVelocity + Current.GravityVelocity).Size());
 		for (int32 bodyIndex = 0; bodyIndex < Context.Bodies.Num(); ++bodyIndex)
 		{
 			const FPlannerBody& body = Context.Bodies[bodyIndex];
@@ -2563,8 +2666,7 @@ namespace
 				closestDistance - body.RadiusUU);
 			const double relativeSpeed = stepSeconds > 0.0
 				? relativeStep.Size() / stepSeconds : 0.0;
-			const double requiredGap = CalculatePredictionReserveUU(
-				body.RadiusUU, relativeSpeed, stepSeconds);
+			const double requiredGap = CalculateBodyPredictionReserveUU(body, relativeSpeed, stepSeconds);
 			const double requiredDistance = body.RadiusUU + requiredGap;
 			if (closestDistance < requiredDistance)
 			{
@@ -2576,18 +2678,8 @@ namespace
 			const double closingSpeed = stepSeconds > 0.0 && previousRelative.Size() > 0.0
 				? FMath::Max(0.0, -FVector::DotProduct(previousRelative.GetSafeNormal(),
 					relativeStep / stepSeconds)) : 0.0;
-			const double escapeSpeed = UnrealUnitsPerMeter * FMath::Sqrt(2.0 *
-				Context.GravityCoefficient * body.MassTonnes /
-				FMath::Max(1.0, body.RadiusUU / UnrealUnitsPerMeter));
-			const double speedFactor = closingSpeed / FMath::Max(1.0, closingSpeed + escapeSpeed);
-			const double fuelFactor = Context.InitialFuelKg > 0.0
-				? 1.0 - Current.FuelKg / Context.InitialFuelKg : 1.0;
-			const double proximity = body.bPlanet
-				? 1.0 / (1.0 + FMath::Square(closestDistance / body.AvoidRadiusUU))
-				: FMath::Square(body.AvoidRadiusUU /
-					FMath::Max(body.AvoidRadiusUU, closestDistance));
-			const double hazard = proximity * (0.5 + 0.25 * speedFactor + 0.25 * fuelFactor);
-			OutStepRisk = FMath::Max(OutStepRisk, FMath::Clamp(hazard, 0.0, 1.0));
+			OutStepRisk = FMath::Max(OutStepRisk, EvaluateRouteBodyRisk(Context, body, Current,
+				closestDistance, requiredGap, closingSpeed, shipSpeed, Candidate));
 		}
 		return true;
 	}
@@ -2947,6 +3039,9 @@ namespace
 			if (OutFailure != nullptr) OutFailure->RequiredFuelKg = OutCandidate.FuelUsedKg;
 			return reject(ESimulationFailureReason::Fuel, INDEX_NONE);
 		}
+		// Only fuel left after the complete nominal schedule is available for corrections.
+		OutCandidate.AvailableCorrectionFuelKg = FMath::Max(0.0, Context.InitialFuelKg - OutCandidate.FuelUsedKg);
+		OutCandidate.DesiredCorrectionFuelKg = OutCandidate.FuelUsedKg * Context.DesiredCorrectionFuelReserveFraction;
 		int32 segmentIndex = 0;
 		const FScriptedPose initial = EvaluateScriptedMotion(OutCandidate.MotionSegments, 0.0, &segmentIndex);
 		state.Position = initial.Position;
@@ -2995,7 +3090,7 @@ namespace
 			double requiredGapUU = 0.0;
 			if (!EvaluateSafetyAndRisk(previous, state, Context, currentBodyPositions, nextBodyPositions,
 				stepRisk, blockingBodyIndex, OutCandidate.MinimumStarClearanceUU,
-				OutCandidate.MinimumPlanetClearanceUU, physicalGapUU, requiredGapUU))
+				OutCandidate.MinimumPlanetClearanceUU, physicalGapUU, requiredGapUU, OutCandidate))
 			{
 				if (OutFailure != nullptr)
 				{
@@ -3301,6 +3396,14 @@ namespace
 		OutContext.MaxGuideCandidates = Settings.MaxGuideCandidates;
 		OutContext.MaxDetailedCandidates = Settings.MaxDetailedCandidates;
 		OutContext.MinimumRouteSeparationFraction = Settings.MinimumRouteSeparationFraction;
+		OutContext.CriticalBodyClearanceRadiusFraction = FMath::IsFinite(Settings.CriticalBodyClearanceRadiusFraction)
+			? FMath::Max(0.0, Settings.CriticalBodyClearanceRadiusFraction) : 0.6;
+		OutContext.ShipToPlanetSpeedFactor = FMath::IsFinite(Settings.ShipToPlanetSpeedFactor)
+			? Settings.ShipToPlanetSpeedFactor : 2.0;
+		OutContext.DesiredCorrectionFuelReserveFraction = FMath::IsFinite(Settings.DesiredCorrectionFuelReservePercent)
+			? FMath::Clamp(Settings.DesiredCorrectionFuelReservePercent, 0.0, 100.0) / 100.0 : 0.2;
+		OutContext.ManeuverVelocityErrorFraction = FMath::IsFinite(Settings.ManeuverSpeedErrorFraction)
+			? FMath::Clamp(Settings.ManeuverSpeedErrorFraction, 0.0, 1.0) : 0.01;
 		OutContext.ModeWeights[0] = Settings.FuelEfficient;
 		OutContext.ModeWeights[1] = Settings.TimeEfficient;
 		OutContext.ModeWeights[2] = Settings.Balanced;
@@ -3417,6 +3520,19 @@ namespace
 		UE_LOG(LogSpaceNavRoute, Display, TEXT("Fuel kg %.3f"), Candidate.FuelUsedKg);
 		UE_LOG(LogSpaceNavRoute, Display, TEXT("Flight s %.2f"), Candidate.FlightTimeSeconds);
 		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk %.4f"), Candidate.RiskCost);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk dist %.3f"), Candidate.DistanceRisk);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk speed %.3f"), Candidate.ApproachSpeedRisk);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk ratio %.3f"), Candidate.SpeedAdvantageRisk);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk error %.3f"), Candidate.ManeuverSensitivityRisk);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Risk fuel %.3f"), Candidate.CorrectionFuelRisk);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Error max m %.3g"),
+			Candidate.MaximumManeuverDeviationUU / UnrealUnitsPerMeter);
+		if (Candidate.MinimumManeuverMarginUU != TNumericLimits<double>::Max())
+			UE_LOG(LogSpaceNavRoute, Display, TEXT("Margin min m %.3g"),
+				Candidate.MinimumManeuverMarginUU / UnrealUnitsPerMeter);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Corr need kg %.3g"), Candidate.RequiredCorrectionFuelKg);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Corr free kg %.3g"), Candidate.AvailableCorrectionFuelKg);
+		UE_LOG(LogSpaceNavRoute, Display, TEXT("Corr goal kg %.3g"), Candidate.DesiredCorrectionFuelKg);
 		UE_LOG(LogSpaceNavRoute, Display, TEXT("Turns %d"), Candidate.MacroTurnCount);
 		int32 arcs = 0;
 		for (const FScriptedMotionSegment& segment : Candidate.MotionSegments)
@@ -4179,9 +4295,11 @@ namespace
 		double requiredGap = 0.0;
 		bool bSafe = EvaluateSafetyAndRisk(Previous, Current, Context, PreviousBodyPositions,
 			CurrentBodyPositions, OutRisk, blockingBody, Candidate.MinimumStarClearanceUU,
-			Candidate.MinimumPlanetClearanceUU, physicalGap, requiredGap);
+			Candidate.MinimumPlanetClearanceUU, physicalGap, requiredGap, Candidate);
 		const double seconds = Current.ElapsedSeconds - Previous.ElapsedSeconds;
 		const double shipBound = GetTimeCurveDeviationUU(Segment, Previous.ElapsedSeconds, Current.ElapsedSeconds);
+		const double shipSpeed = FMath::Max((Previous.EngineVelocity + Previous.GravityVelocity).Size(),
+			(Current.EngineVelocity + Current.GravityVelocity).Size());
 		for (int32 bodyIndex = 0; bSafe && bodyIndex < Context.Bodies.Num(); ++bodyIndex)
 		{
 			const FPlannerBody& body = Context.Bodies[bodyIndex];
@@ -4197,7 +4315,7 @@ namespace
 			const double conservativeDistance = FMath::Max(0.0, closestDistance - bound);
 			double& clearance = body.bPlanet ? Candidate.MinimumPlanetClearanceUU : Candidate.MinimumStarClearanceUU;
 			clearance = FMath::Min(clearance, conservativeDistance - body.RadiusUU);
-			const double reserve = CalculatePredictionReserveUU(body.RadiusUU, relativeStep.Size() / seconds, seconds);
+			const double reserve = CalculateBodyPredictionReserveUU(body, relativeStep.Size() / seconds, seconds);
 			if (conservativeDistance < body.RadiusUU + reserve)
 			{
 				bSafe = false;
@@ -4208,13 +4326,8 @@ namespace
 			}
 			const double closingSpeed = previousRelative.Size() > 0.0
 				? FMath::Max(0.0, -FVector::DotProduct(previousRelative.GetSafeNormal(), relativeStep / seconds)) : 0.0;
-			const double escapeSpeed = UnrealUnitsPerMeter * FMath::Sqrt(2.0 * Context.GravityCoefficient *
-				body.MassTonnes / FMath::Max(1.0, body.RadiusUU / UnrealUnitsPerMeter));
-			const double speedFactor = closingSpeed / FMath::Max(1.0, closingSpeed + escapeSpeed);
-			const double fuelFactor = Context.InitialFuelKg > 0.0 ? 1.0 - Current.FuelKg / Context.InitialFuelKg : 1.0;
-			const double proximity = body.bPlanet ? 1.0 / (1.0 + FMath::Square(conservativeDistance / body.AvoidRadiusUU)) :
-				FMath::Square(body.AvoidRadiusUU / FMath::Max(body.AvoidRadiusUU, conservativeDistance));
-			OutRisk = FMath::Max(OutRisk, FMath::Clamp(proximity * (0.5 + 0.25 * speedFactor + 0.25 * fuelFactor), 0.0, 1.0));
+			OutRisk = FMath::Max(OutRisk, EvaluateRouteBodyRisk(Context, body, Current,
+				conservativeDistance, reserve, closingSpeed, shipSpeed, Candidate));
 		}
 		if (!bSafe && OutFailure != nullptr)
 		{
@@ -4233,6 +4346,8 @@ namespace
 	bool SampleTimeCurveCandidate(const FPlannerContext& Context, FRouteCandidate& Candidate,
 		FSimulationFailure* OutFailure)
 	{
+		Candidate.AvailableCorrectionFuelKg = FMath::Max(0.0, Context.InitialFuelKg - Candidate.FuelUsedKg);
+		Candidate.DesiredCorrectionFuelKg = Candidate.FuelUsedKg * Context.DesiredCorrectionFuelReserveFraction;
 		FNavigationState state = Context.InitialState;
 		state.GravityVelocity = FVector::ZeroVector;
 		state.YawAngularVelocity = 0.0f;
@@ -4581,7 +4696,7 @@ namespace
 					bodyIndex, 0.0, Bounds.GetCenter(), Context);
 				return false;
 			}
-			const double reserve = CalculatePredictionReserveUU(body.RadiusUU, SpeedUU + orbitSpeed, 0.25);
+			const double reserve = CalculateBodyPredictionReserveUU(body, SpeedUU + orbitSpeed, 0.25);
 			const double reach = body.RadiusUU + reserve + orbitSpeed * (HorizonSeconds + PhaseSlackSeconds);
 			if (Bounds.ComputeSquaredDistanceToPoint(center) <= reach * reach) Scratch.BodyIndices.Add(bodyIndex);
 		}
@@ -4624,7 +4739,7 @@ namespace
 			const double orbitBound = body.bPlanet ? body.Orbit.InitialOffset.Size() *
 				FMath::Square(body.Orbit.AngularSpeedRadiansPerSecond) * seconds * seconds / 8.0 : 0.0;
 			const double relativeSpeed = seconds > 0.0 ? relativeStep.Size() / seconds : 0.0;
-			const double reserve = CalculatePredictionReserveUU(body.RadiusUU, relativeSpeed, seconds) +
+			const double reserve = CalculateBodyPredictionReserveUU(body, relativeSpeed, seconds) +
 				shipBound + orbitBound + orbitSpeed * PhaseSlackSeconds;
 			if (!FMath::IsFinite(distance) || !FMath::IsFinite(reserve) || distance < body.RadiusUU + reserve)
 			{

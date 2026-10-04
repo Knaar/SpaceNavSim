@@ -25,6 +25,7 @@ bool USpaceNavResourceStoreComponent::InitSettings()
 
 	Resources.Fuel = initialFuelKg;
 	Resources.MaxFuel = maxFuelKg;
+	OnFuelAmountChanged.Broadcast(Resources.Fuel);
 	if (bLogFuel) UE_LOG(LogSpaceNavResourceStore, Display, TEXT("Settings initialized"));
 	return true;
 }
@@ -45,7 +46,11 @@ float USpaceNavResourceStoreComponent::AddFuel(float AmountKg)
 			TEXT("AddFuel before=%.9g requested=%.9g added=%.9g after=%.9g"),
 			previousFuelKg, AmountKg, addedFuelKg, Resources.Fuel);
 	}
-	if (addedFuelKg > 0.0f) BroadcastFuelChangedAtStep(previousFuelKg);
+	if (addedFuelKg > 0.0f)
+	{
+		OnFuelAmountChanged.Broadcast(Resources.Fuel);
+		BroadcastFuelChangedAtStep(previousFuelKg);
+	}
 	return addedFuelKg;
 }
 
@@ -61,7 +66,11 @@ bool USpaceNavResourceStoreComponent::ConsumeFuel(float AmountKg)
 		bFuelDepleted = Resources.Fuel == 0.0f;
 	}
 
-	if (consumedFuelKg > 0.0f) BroadcastFuelChangedAtStep(previousFuelKg);
+	if (consumedFuelKg > 0.0f)
+	{
+		OnFuelAmountChanged.Broadcast(Resources.Fuel);
+		BroadcastFuelChangedAtStep(previousFuelKg);
+	}
 	if (bFuelDepleted)
 	{
 		if (bLogFuel) UE_LOG(LogSpaceNavResourceStore, Display, TEXT("Fuel empty"));

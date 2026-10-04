@@ -19,6 +19,7 @@ struct SPACENAVSIM_API FSpaceNavResources
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSpaceNavFuelChanged, float, FuelKg);
+DECLARE_MULTICAST_DELEGATE_OneParam(FSpaceNavFuelAmountChanged, float);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FSpaceNavFuelDepleted);
 
 UCLASS(Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -47,6 +48,8 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "SpaceNavResourceStore|Events")
 	FSpaceNavFuelChanged OnFuelChanged;
+
+	FSpaceNavFuelAmountChanged OnFuelAmountChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "SpaceNavResourceStore|Events")
 	FSpaceNavFuelDepleted OnFuelDepleted;

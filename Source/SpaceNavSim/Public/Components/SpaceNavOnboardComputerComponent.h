@@ -5,7 +5,10 @@
 #include "SpaceNavOnboardComputerComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSpaceNavSpeedUpdated, float, SpeedCmPerSecond);
+class USpaceNavResourceStoreComponent;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSpaceNavFuelConsumptionUpdated, float, KgPerKm);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSpaceNavSpacecraftMassChanged, double, CurrentSpacecraftMassKg);
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class SPACENAVSIM_API USpaceNavOnboardComputerComponent : public UActorComponent
@@ -30,8 +33,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "SpaceNavOnboardComputer|Events")
 	FSpaceNavFuelConsumptionUpdated OnFuelConsumptionUpdated;
 
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavOnboardComputer|Events")
+	FSpaceNavSpacecraftMassChanged OnSpacecraftMassChanged;
+
 private:
+	void InitializeMassTracking();
+	void HandleFuelAmountChanged(float RemainingFuelKg);
+	bool CheckMassResources() const;
 	void UpdateDistance();
+
+	TWeakObjectPtr<USpaceNavResourceStoreComponent> ResourceStore;
+	double PreviousSpacecraftMassKg = 0.0;
+	bool bHasSpacecraftMassSample = false;
 
 	FVector PreviousLocation = FVector::ZeroVector;
 	double AccumulatedDistanceCm = 0.0;

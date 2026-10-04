@@ -17,6 +17,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceNavEngine|Movement")
 	bool InitEngine();
 
+	void SetInitialVelocity(const FVector& WorldVelocity);
 	void BeginScriptedFlight();
 	void SetScriptedVelocity(const FVector& WorldVelocity);
 	void EndScriptedFlight(const FVector& ExitVelocity);

@@ -16,7 +16,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogSpaceNavSystemGenerator, Log, All);
 namespace
 {
 	constexpr double UnrealUnitsPerKm = 100000.0;
-	constexpr double UnrealUnitsPerMeter = 100.0;
+	constexpr double GeneratorUnitsPerMeter = 100.0;
 	constexpr double MetersPerKm = 1000.0;
 	constexpr double OrbitJitterFraction = 0.05;
 	constexpr int32 RandomSlotAttemptsPerPlanet = 20;
@@ -242,7 +242,7 @@ bool ASpaceNavSystemGenerator::SpawnMarkers()
 	const FVector radialDirection = randomStream.VRand();
 	const FVector radialOffset = radialDirection * (GeneratorData->SystemBoundaryKm * UnrealUnitsPerKm);
 	const double startDistance = SampleRange(randomStream, 2.0, 5.0) *
-		GeneratorData->CentralBodyRadiusMeters * UnrealUnitsPerMeter;
+		GeneratorData->CentralBodyRadiusMeters * GeneratorUnitsPerMeter;
 	const FQuat spawnRotation = GetActorQuat();
 	const FTransform targetTransform(spawnRotation, GetActorLocation() + radialOffset);
 	const FTransform startTransform(spawnRotation, GetActorLocation() - radialDirection * startDistance);

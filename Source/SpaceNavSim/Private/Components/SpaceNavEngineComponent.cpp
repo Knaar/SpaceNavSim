@@ -11,7 +11,7 @@
 
 namespace
 {
-	constexpr double UnrealUnitsPerMeter = 100.0;
+	constexpr double EngineUnitsPerMeter = 100.0;
 
 	FVector CalculateGravityAcceleration(const ASpaceNavPawn& Pawn)
 	{
@@ -56,8 +56,8 @@ FVector USpaceNavEngineComponent::CalculateBodyGravityAcceleration(const FVector
 	const FVector towardBody = BodyLocation - PawnLocation;
 	const double centerDistanceUU = towardBody.Size();
 	if (centerDistanceUU <= 0.0) return FVector::ZeroVector;
-	const double distanceMeters = FMath::Max(centerDistanceUU / UnrealUnitsPerMeter, RadiusMeters);
-	const double accelerationUU = UnrealUnitsPerMeter * GravityCoefficient * MassTonnes /
+	const double distanceMeters = FMath::Max(centerDistanceUU / EngineUnitsPerMeter, RadiusMeters);
+	const double accelerationUU = EngineUnitsPerMeter * GravityCoefficient * MassTonnes /
 		FMath::Square(distanceMeters);
 	return towardBody / centerDistanceUU * accelerationUU;
 }
@@ -65,8 +65,14 @@ FVector USpaceNavEngineComponent::CalculateBodyGravityAcceleration(const FVector
 bool USpaceNavEngineComponent::InitEngine()
 {
 	if (PawnSettings == nullptr) return false;
+	ThrustAcceleration = PawnSettings->MaxThrust;
 	MaxSpeed = PawnSettings->MaxSpeed;
 	return true;
+}
+
+void USpaceNavEngineComponent::SetInitialVelocity(const FVector& WorldVelocity)
+{
+	Velocity = WorldVelocity;
 }
 
 void USpaceNavEngineComponent::BeginScriptedFlight()

@@ -86,8 +86,8 @@ void ASpaceNavPlanet::ApplyVisualRadius()
 	const double meshRadiusUU = staticMesh->GetBounds().SphereRadius;
 	if (meshRadiusUU <= 0.0) return;
 
-	constexpr double UnrealUnitsPerMeter = 100.0;
-	BodyMesh->SetWorldScale3D(FVector(RadiusMeters * UnrealUnitsPerMeter / meshRadiusUU));
+	constexpr double planetUnitsPerMeter = 100.0;
+	BodyMesh->SetWorldScale3D(FVector(RadiusMeters * planetUnitsPerMeter / meshRadiusUU));
 }
 
 void ASpaceNavPlanet::ApplyPlanetMaterial()
