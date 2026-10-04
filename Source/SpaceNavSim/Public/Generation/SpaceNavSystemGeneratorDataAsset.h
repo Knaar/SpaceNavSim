@@ -39,6 +39,9 @@ public:
 	int32 NumberOfPlanets = 5;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
+	double PlanetSpacingMultiplier = 3.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
 	TSubclassOf<ASpaceNavPlanet> PlanetClass;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
@@ -61,6 +64,12 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
 	double MaxOrbitalRadiusKm = 100.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Min Outer Orbit Speed (m/s)"))
+	double MinPlanetOrbitalSpeedMetersPerSecond = 1.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Max Outer Orbit Speed (m/s)"))
+	double MaxPlanetOrbitalSpeedMetersPerSecond = 5.0;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
 	double MinInitialOrbitalPhaseDegrees = 0.0;

@@ -10,6 +10,8 @@ class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSpaceNavFuelRequest, float, SuggestedFuelAmount);
+
 UCLASS(PrioritizeCategories = "Settings|Debug")
 class SPACENAVSIM_API ASpaceNavPawn : public APawn
 {
@@ -36,9 +38,34 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
 	TObjectPtr<UFloatingPawnMovement> MovementComponent;
 
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnMoveForward;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnMoveLeft;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnMoveRight;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnMoveUp;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnMoveDown;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnTurnYawLeft;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnTurnYawRight;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnTurnPitchUp;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceNavPawn|Events")
+	FSpaceNavFuelRequest OnTurnPitchDown;
+
 private:
-	void MoveForward(float Value);
-	void MoveRight(float Value);
 	void LookYaw(float Value);
 	void LookPitch(float Value);
 	void LogInput(const TCHAR* Message) const;

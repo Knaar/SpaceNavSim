@@ -15,9 +15,26 @@ class SPACENAVSIM_API ASpaceNavPlanet : public AActor
 public:
 	ASpaceNavPlanet();
 
+	struct FOrbitSnapshot
+	{
+		FVector Center = FVector::ZeroVector;
+		FVector InitialOffset = FVector::ZeroVector;
+		FVector Axis = FVector::UpVector;
+		FVector CurrentLocation = FVector::ZeroVector;
+		double AngularSpeedRadiansPerSecond = 0.0;
+		double ElapsedSeconds = 0.0;
+
+		FVector LocationAfter(double SecondsAhead) const;
+	};
+
 	void InitializePlanet(double InMassTonnes, double InRadiusMeters, double InOrbitalRadiusKm,
-		double InInitialOrbitalPhaseDegrees, const FVector& InInitialOrbitalVelocityMetersPerSecond,
+		double InInitialOrbitalPhaseDegrees, const FVector& InOrbitCenter, const FVector& InOrbitAxis,
+		double InAngularSpeedRadiansPerSecond,
+		const FVector& InInitialOrbitalVelocityMetersPerSecond,
 		UMaterialInterface* InMaterial);
+
+	FVector PredictLocationAfter(double SecondsAhead) const;
+	FOrbitSnapshot GetOrbitSnapshot() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPlanet|Components")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
@@ -39,6 +56,7 @@ public:
 
 protected:
 	virtual void PostInitializeComponents() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 private:
 	void ApplyVisualRadius();
@@ -46,4 +64,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> SelectedMaterial;
+
+	FVector OrbitCenter = FVector::ZeroVector;
+	FVector InitialOrbitOffset = FVector::ZeroVector;
+	FVector OrbitAxis = FVector::UpVector;
+	double AngularSpeedRadiansPerSecond = 0.0;
+	double OrbitElapsedSeconds = 0.0;
 };

@@ -8,7 +8,6 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "Math/RotationMatrix.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSpaceNavPawn, Log, All);
@@ -55,8 +54,6 @@ void ASpaceNavPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	}
 
 	if (!bInputSetupLogged) LogInput(TEXT("Started"));
-	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ASpaceNavPawn::MoveForward);
-	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &ASpaceNavPawn::MoveRight);
 	PlayerInputComponent->BindAxis(TEXT("LookYaw"), this, &ASpaceNavPawn::LookYaw);
 	PlayerInputComponent->BindAxis(TEXT("LookPitch"), this, &ASpaceNavPawn::LookPitch);
 	if (!bInputSetupLogged) LogInput(TEXT("Controls ready"));
@@ -66,19 +63,6 @@ void ASpaceNavPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 UPawnMovementComponent* ASpaceNavPawn::GetMovementComponent() const
 {
 	return MovementComponent.Get();
-}
-
-void ASpaceNavPawn::MoveForward(float Value)
-{
-	if (FMath::IsNearlyZero(Value) || Controller == nullptr) return;
-	AddMovementInput(Controller->GetControlRotation().Vector(), Value);
-}
-
-void ASpaceNavPawn::MoveRight(float Value)
-{
-	if (FMath::IsNearlyZero(Value) || Controller == nullptr) return;
-	const FVector rightDirection = FRotationMatrix(Controller->GetControlRotation()).GetUnitAxis(EAxis::Y);
-	AddMovementInput(rightDirection, Value);
 }
 
 void ASpaceNavPawn::LookYaw(float Value)

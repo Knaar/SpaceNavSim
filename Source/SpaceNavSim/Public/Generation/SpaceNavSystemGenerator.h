@@ -6,8 +6,11 @@
 
 class USpaceNavSystemGeneratorDataAsset;
 class ASpaceNavCentralBody;
+class ASpaceNavStartMarker;
 class UMaterialInterface;
 struct FRandomStream;
+
+DECLARE_MULTICAST_DELEGATE(FOnSpaceNavStartZoneReady);
 
 UCLASS(PrioritizeCategories = "Settings|Data")
 class SPACENAVSIM_API ASpaceNavSystemGenerator : public AActor
@@ -15,6 +18,9 @@ class SPACENAVSIM_API ASpaceNavSystemGenerator : public AActor
 	GENERATED_BODY()
 
 public:
+	ASpaceNavStartMarker* GetStartMarker() const;
+	FOnSpaceNavStartZoneReady OnStartZoneReady;
+
 	UPROPERTY(EditAnywhere, Category = "Settings|Data")
 	TObjectPtr<USpaceNavSystemGeneratorDataAsset> GeneratorData;
 
@@ -35,10 +41,14 @@ private:
 	ASpaceNavCentralBody* SpawnCentralBody();
 	int32 SpawnPlanets();
 	bool SpawnMarkers();
-	TArray<double> GeneratePlanetElevations(FRandomStream& RandomStream) const;
-	bool SpawnPlanet(FRandomStream& RandomStream, double ElevationDegrees, bool& bWarnedMissingMaterial);
+	TArray<FVector> GenerateOrbitSlots() const;
+	bool SpawnPlanet(FRandomStream& RandomStream, const FVector& LocalOrbitPositionKm,
+		double SignedAngularSpeedRadiansPerSecond, bool& bWarnedMissingMaterial);
 	UMaterialInterface* SelectPlanetMaterial(FRandomStream& RandomStream, bool& bWarnedMissingMaterial) const;
 	void LogGeneration(ELogVerbosity::Type Verbosity, const TCHAR* Message) const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ASpaceNavStartMarker> StartMarker;
 
 	bool bLogGeneration = true;
 };
