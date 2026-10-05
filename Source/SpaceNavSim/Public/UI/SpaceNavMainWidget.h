@@ -13,6 +13,10 @@ class SPACENAVSIM_API USpaceNavMainWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	void InitCurrentMass(float Value);
+	void InitRemainingFuel(float Value);
+	void InitFuelConsumption(float Value);
+
 	UFUNCTION(BlueprintCallable, Category = "SpaceNavMainWidget|Updates")
 	void UpdateCurrentMass(float Value);
 

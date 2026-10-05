@@ -71,6 +71,19 @@ void USpaceNavOnboardComputerComponent::TickComponent(float DeltaTime, ELevelTic
 	ElapsedSeconds = 0.0;
 }
 
+double USpaceNavOnboardComputerComponent::GetCurrentMass() const
+{
+	return PreviousSpacecraftMassKg;
+}
+
+float USpaceNavOnboardComputerComponent::GetFuelConsumption() const
+{
+	const double distanceCm = TotalDistanceCm - FuelTrackingStartDistanceCm;
+	if (distanceCm <= 0.0) return 0.0f;
+
+	return static_cast<float>(TotalConsumedFuelKg * CentimetersPerKilometer / distanceCm);
+}
+
 void USpaceNavOnboardComputerComponent::InitializeMassTracking()
 {
 	if (ResourceStore.IsValid()) ResourceStore->OnFuelAmountChanged.RemoveAll(this);

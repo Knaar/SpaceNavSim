@@ -5,6 +5,8 @@
 #include "SpaceNavUIComponent.generated.h"
 
 class USpaceNavMainWidget;
+class USpaceNavOnboardComputerComponent;
+class USpaceNavResourceStoreComponent;
 
 UCLASS(Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class SPACENAVSIM_API USpaceNavUIComponent : public UActorComponent
@@ -14,6 +16,15 @@ class SPACENAVSIM_API USpaceNavUIComponent : public UActorComponent
 public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceNavUIComponent|Initialization")
 	void InitializeMainWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "SpaceNavUIComponent|Initialization")
+	void InitCurrentMass(USpaceNavOnboardComputerComponent* OnboardComputer);
+
+	UFUNCTION(BlueprintCallable, Category = "SpaceNavUIComponent|Initialization")
+	void InitRemainingFuel(USpaceNavResourceStoreComponent* ResourceStore);
+
+	UFUNCTION(BlueprintCallable, Category = "SpaceNavUIComponent|Initialization")
+	void InitFuelConsumption(USpaceNavOnboardComputerComponent* OnboardComputer);
 
 	UFUNCTION(BlueprintCallable, Category = "SpaceNavUIComponent|Updates")
 	void UpdateCurrentMass(float Value);

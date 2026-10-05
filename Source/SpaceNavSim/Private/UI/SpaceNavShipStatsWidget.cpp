@@ -2,6 +2,27 @@
 
 #include "Components/TextBlock.h"
 
+void USpaceNavShipStatsWidget::InitCurrentMass(float Value)
+{
+	DisplayedCurrentMass = Value;
+	TargetCurrentMass = Value;
+	UpdateDisplayedText(CurrentMassText, DisplayedCurrentMass);
+}
+
+void USpaceNavShipStatsWidget::InitRemainingFuel(float Value)
+{
+	DisplayedRemainingFuel = Value;
+	TargetRemainingFuel = Value;
+	UpdateDisplayedText(RemainingFuelText, DisplayedRemainingFuel);
+}
+
+void USpaceNavShipStatsWidget::InitFuelConsumption(float Value)
+{
+	DisplayedFuelConsumption = Value;
+	TargetFuelConsumption = Value;
+	UpdateDisplayedText(FuelConsumptionText, DisplayedFuelConsumption);
+}
+
 void USpaceNavShipStatsWidget::UpdateCurrentMass(float Value)
 {
 	TargetCurrentMass = Value;

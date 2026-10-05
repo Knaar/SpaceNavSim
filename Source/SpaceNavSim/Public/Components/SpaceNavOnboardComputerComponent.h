@@ -27,6 +27,9 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 
+	double GetCurrentMass() const;
+	float GetFuelConsumption() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "SpaceNavOnboardComputer|Events")
 	FSpaceNavSpeedUpdated OnSpeedUpdated;
 

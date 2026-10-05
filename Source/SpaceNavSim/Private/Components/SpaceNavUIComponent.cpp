@@ -1,5 +1,7 @@
 #include "Components/SpaceNavUIComponent.h"
 
+#include "Components/SpaceNavOnboardComputerComponent.h"
+#include "Components/SpaceNavResourceStoreComponent.h"
 #include "Engine/World.h"
 #include "UI/SpaceNavMainWidget.h"
 
@@ -17,6 +19,27 @@ void USpaceNavUIComponent::InitializeMainWidget()
 	UpdateCurrentSpeed(0.0f);
 	UpdateRemainingFuel(0.0f);
 	UpdateFuelConsumption(0.0f);
+}
+
+void USpaceNavUIComponent::InitCurrentMass(USpaceNavOnboardComputerComponent* OnboardComputer)
+{
+	if (!MainWidget || !OnboardComputer) return;
+
+	MainWidget->InitCurrentMass(static_cast<float>(OnboardComputer->GetCurrentMass()));
+}
+
+void USpaceNavUIComponent::InitRemainingFuel(USpaceNavResourceStoreComponent* ResourceStore)
+{
+	if (!MainWidget || !ResourceStore) return;
+
+	MainWidget->InitRemainingFuel(ResourceStore->GetRemainingFuel());
+}
+
+void USpaceNavUIComponent::InitFuelConsumption(USpaceNavOnboardComputerComponent* OnboardComputer)
+{
+	if (!MainWidget || !OnboardComputer) return;
+
+	MainWidget->InitFuelConsumption(OnboardComputer->GetFuelConsumption());
 }
 
 void USpaceNavUIComponent::UpdateCurrentMass(float Value)

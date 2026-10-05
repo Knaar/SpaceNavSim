@@ -79,6 +79,11 @@ bool USpaceNavResourceStoreComponent::ConsumeFuel(float AmountKg)
 	return consumedFuelKg > 0.0f;
 }
 
+float USpaceNavResourceStoreComponent::GetRemainingFuel() const
+{
+	return Resources.Fuel;
+}
+
 void USpaceNavResourceStoreComponent::BeginPlay()
 {
 	Super::BeginPlay();

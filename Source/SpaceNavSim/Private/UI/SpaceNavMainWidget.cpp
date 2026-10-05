@@ -3,6 +3,27 @@
 #include "UI/SpaceNavNavigationWidget.h"
 #include "UI/SpaceNavShipStatsWidget.h"
 
+void USpaceNavMainWidget::InitCurrentMass(float Value)
+{
+	if (!ShipStatsWidget) return;
+
+	ShipStatsWidget->InitCurrentMass(Value);
+}
+
+void USpaceNavMainWidget::InitRemainingFuel(float Value)
+{
+	if (!ShipStatsWidget) return;
+
+	ShipStatsWidget->InitRemainingFuel(Value);
+}
+
+void USpaceNavMainWidget::InitFuelConsumption(float Value)
+{
+	if (!ShipStatsWidget) return;
+
+	ShipStatsWidget->InitFuelConsumption(Value);
+}
+
 void USpaceNavMainWidget::UpdateCurrentMass(float Value)
 {
 	if (!ShipStatsWidget) return;

@@ -37,6 +37,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceNavResourceStore|Resources")
 	bool ConsumeFuel(float AmountKg);
 
+	float GetRemainingFuel() const;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavResourceStore|Resources")
 	FSpaceNavResources Resources;
 
