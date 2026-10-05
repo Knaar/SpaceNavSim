@@ -59,13 +59,7 @@ void ASpaceNavSystemGenerator::GenerateSystem()
 	}
 	LogGeneration(ELogVerbosity::Display, TEXT("Body spawned, lit"));
 
-	const int32 spawnedPlanets = SpawnPlanets();
-	if (spawnedPlanets != GeneratorData->NumberOfPlanets)
-	{
-		LogGeneration(ELogVerbosity::Error, *FString::Printf(TEXT("Failed: planet %d"), spawnedPlanets + 1));
-		return;
-	}
-	LogGeneration(ELogVerbosity::Display, *FString::Printf(TEXT("Orbits %d"), spawnedPlanets));
+	if (!SpawnObjects()) return;
 	if (!SpawnMarkers())
 	{
 		LogGeneration(ELogVerbosity::Error, TEXT("Failed: markers"));
@@ -93,7 +87,7 @@ bool ASpaceNavSystemGenerator::CheckGeneratorData() const
 
 bool ASpaceNavSystemGenerator::ValidateSettings() const
 {
-	return ValidateSystemSettings() && ValidateCentralBodySettings() && ValidatePlanetSettings();
+	return ValidateSystemSettings() && ValidateCentralBodySettings() && ValidateObjectSettings();
 }
 
 bool ASpaceNavSystemGenerator::ValidateSystemSettings() const
@@ -131,66 +125,75 @@ bool ASpaceNavSystemGenerator::ValidateCentralBodySettings() const
 	return true;
 }
 
-bool ASpaceNavSystemGenerator::ValidatePlanetSettings() const
+bool ASpaceNavSystemGenerator::ValidateObjectSettings() const
 {
-	if (GeneratorData->NumberOfPlanets < 0)
+	for (const FSpaceNavObjectGenerationSettings& objectSettings : GeneratorData->Objects)
 	{
-		LogGeneration(ELogVerbosity::Error, TEXT("Planet count invalid"));
+		if (!ValidateObjectGroupSettings(objectSettings)) return false;
+	}
+	return true;
+}
+
+bool ASpaceNavSystemGenerator::ValidateObjectGroupSettings(const FSpaceNavObjectGenerationSettings& ObjectSettings) const
+{
+	if (ObjectSettings.NumberOfClass < 0)
+	{
+		LogGeneration(ELogVerbosity::Error, TEXT("Object count invalid"));
 		return false;
 	}
-	if (GeneratorData->NumberOfPlanets == 0)
+	if (ObjectSettings.NumberOfClass == 0)
 	{
 		return true;
 	}
-	if (GeneratorData->PlanetClass == nullptr)
+	if (ObjectSettings.PlanetClass == nullptr)
 	{
-		LogGeneration(ELogVerbosity::Error, TEXT("Planet class missing"));
+		LogGeneration(ELogVerbosity::Error, TEXT("Object class missing"));
 		return false;
 	}
-	return ValidatePlanetRanges();
+	return ValidateObjectRanges(ObjectSettings);
 }
 
-bool ASpaceNavSystemGenerator::ValidatePlanetRanges() const
+bool ASpaceNavSystemGenerator::ValidateObjectRanges(const FSpaceNavObjectGenerationSettings& ObjectSettings) const
 {
-	if (!FMath::IsFinite(GeneratorData->PlanetSpacingMultiplier) || GeneratorData->PlanetSpacingMultiplier <= 1.0)
+	if (!FMath::IsFinite(ObjectSettings.PlanetSpacingMultiplier) || ObjectSettings.PlanetSpacingMultiplier <= 1.0)
 	{
-		LogGeneration(ELogVerbosity::Error, TEXT("Planet spacing invalid"));
+		LogGeneration(ELogVerbosity::Error, TEXT("Object spacing invalid"));
 		return false;
 	}
-	if (!IsValidPositiveRange(GeneratorData->MinPlanetMassTonnes, GeneratorData->MaxPlanetMassTonnes))
+	if (!IsValidPositiveRange(ObjectSettings.MinPlanetMassTonnes, ObjectSettings.MaxPlanetMassTonnes))
 	{
-		LogGeneration(ELogVerbosity::Error, TEXT("Planet mass invalid"));
+		LogGeneration(ELogVerbosity::Error, TEXT("Object mass invalid"));
 		return false;
 	}
-	if (!IsValidPositiveRange(GeneratorData->MinPlanetRadiusMeters, GeneratorData->MaxPlanetRadiusMeters))
+	if (!IsValidPositiveRange(ObjectSettings.MinPlanetRadiusMeters, ObjectSettings.MaxPlanetRadiusMeters))
 	{
-		LogGeneration(ELogVerbosity::Error, TEXT("Planet radius invalid"));
+		LogGeneration(ELogVerbosity::Error, TEXT("Object radius invalid"));
 		return false;
 	}
-	if (!IsValidPositiveRange(GeneratorData->MinOrbitalRadiusKm, GeneratorData->MaxOrbitalRadiusKm) ||
-		GeneratorData->MaxOrbitalRadiusKm > GeneratorData->SystemBoundaryKm)
+	if (!IsValidPositiveRange(ObjectSettings.MinOrbitalRadiusKm, ObjectSettings.MaxOrbitalRadiusKm) ||
+		ObjectSettings.MaxOrbitalRadiusKm > GeneratorData->SystemBoundaryKm)
 	{
 		LogGeneration(ELogVerbosity::Error, TEXT("Orbit radius invalid"));
 		return false;
 	}
-	if (!IsValidPositiveRange(GeneratorData->MinPlanetOrbitalSpeedMetersPerSecond,
-		GeneratorData->MaxPlanetOrbitalSpeedMetersPerSecond))
+	if (!IsValidPositiveRange(ObjectSettings.MinPlanetOrbitalSpeedMetersPerSecond,
+		ObjectSettings.MaxPlanetOrbitalSpeedMetersPerSecond))
 	{
 		LogGeneration(ELogVerbosity::Error, TEXT("Orbit speed invalid"));
 		return false;
 	}
-	if (!FMath::IsFinite(GeneratorData->MinInitialOrbitalPhaseDegrees) ||
-		!FMath::IsFinite(GeneratorData->MaxInitialOrbitalPhaseDegrees) ||
-		GeneratorData->MaxInitialOrbitalPhaseDegrees < GeneratorData->MinInitialOrbitalPhaseDegrees)
+	if (!FMath::IsFinite(ObjectSettings.MinInitialOrbitalPhaseDegrees) ||
+		!FMath::IsFinite(ObjectSettings.MaxInitialOrbitalPhaseDegrees) ||
+		ObjectSettings.MaxInitialOrbitalPhaseDegrees < ObjectSettings.MinInitialOrbitalPhaseDegrees)
 	{
 		LogGeneration(ELogVerbosity::Error, TEXT("Orbit phase invalid"));
 		return false;
 	}
-	const int32 availableSlots = GenerateOrbitSlots().Num();
-	if (availableSlots < GeneratorData->NumberOfPlanets)
+	const int32 availableSlots = GenerateOrbitSlots(ObjectSettings).Num();
+	if (availableSlots < ObjectSettings.NumberOfClass)
 	{
 		LogGeneration(ELogVerbosity::Error,
-			*FString::Printf(TEXT("Failed: slots %d/%d"), availableSlots, GeneratorData->NumberOfPlanets));
+			*FString::Printf(TEXT("Failed: slots %d/%d"), availableSlots, ObjectSettings.NumberOfClass));
 		return false;
 	}
 	return true;
@@ -209,31 +212,50 @@ ASpaceNavCentralBody* ASpaceNavSystemGenerator::SpawnCentralBody()
 	return centralBody;
 }
 
-int32 ASpaceNavSystemGenerator::SpawnPlanets()
+bool ASpaceNavSystemGenerator::SpawnObjects()
 {
-	if (GeneratorData->NumberOfPlanets == 0) return 0;
+	int64 spawnedObjects = 0;
+	bool bWarnedMissingMaterial = false;
+	for (const FSpaceNavObjectGenerationSettings& objectSettings : GeneratorData->Objects)
+	{
+		const int32 spawnedPlanets = SpawnPlanets(objectSettings, bWarnedMissingMaterial);
+		if (spawnedPlanets != objectSettings.NumberOfClass)
+		{
+			LogGeneration(ELogVerbosity::Error,
+				*FString::Printf(TEXT("Failed: object %lld"), spawnedObjects + spawnedPlanets + 1));
+			return false;
+		}
+		spawnedObjects += spawnedPlanets;
+	}
+	LogGeneration(ELogVerbosity::Display, *FString::Printf(TEXT("Objects %lld"), spawnedObjects));
+	return true;
+}
+
+int32 ASpaceNavSystemGenerator::SpawnPlanets(const FSpaceNavObjectGenerationSettings& ObjectSettings,
+	bool& bWarnedMissingMaterial)
+{
+	if (ObjectSettings.NumberOfClass == 0) return 0;
 
 	FRandomStream randomStream(GeneratorData->RandomSeed);
 	const int32 orbitDirectionSign = randomStream.RandRange(0, 1) == 0 ? -1 : 1;
-	const double outerOrbitSpeed = SampleRange(randomStream, GeneratorData->MinPlanetOrbitalSpeedMetersPerSecond,
-		GeneratorData->MaxPlanetOrbitalSpeedMetersPerSecond);
+	const double outerOrbitSpeed = SampleRange(randomStream, ObjectSettings.MinPlanetOrbitalSpeedMetersPerSecond,
+		ObjectSettings.MaxPlanetOrbitalSpeedMetersPerSecond);
 	const double angularSpeedRadiansPerSecond = orbitDirectionSign * outerOrbitSpeed /
-		(GeneratorData->MaxOrbitalRadiusKm * MetersPerKm);
-	const TArray<FVector> orbitSlots = GenerateOrbitSlots();
-	const double minimumSeparationKm = 2.0 * GeneratorData->MaxPlanetRadiusMeters *
-		GeneratorData->PlanetSpacingMultiplier / MetersPerKm;
+		(ObjectSettings.MaxOrbitalRadiusKm * MetersPerKm);
+	const TArray<FVector> orbitSlots = GenerateOrbitSlots(ObjectSettings);
+	const double minimumSeparationKm = 2.0 * ObjectSettings.MaxPlanetRadiusMeters *
+		ObjectSettings.PlanetSpacingMultiplier / MetersPerKm;
 	const double jitterKm = minimumSeparationKm * OrbitJitterFraction;
-	bool bWarnedMissingMaterial = false;
-	for (int32 planetIndex = 0; planetIndex < GeneratorData->NumberOfPlanets; ++planetIndex)
+	for (int32 planetIndex = 0; planetIndex < ObjectSettings.NumberOfClass; ++planetIndex)
 	{
 		const FVector& orbitSlot = orbitSlots[planetIndex];
 		const double orbitRadiusKm = orbitSlot.Size();
 		const double radialJitterKm = SampleRange(randomStream, -jitterKm, jitterKm);
 		const FVector orbitPositionKm = orbitSlot * ((orbitRadiusKm + radialJitterKm) / orbitRadiusKm);
-		if (!SpawnPlanet(randomStream, orbitPositionKm, angularSpeedRadiansPerSecond,
+		if (!SpawnPlanet(randomStream, ObjectSettings, orbitPositionKm, angularSpeedRadiansPerSecond,
 			bWarnedMissingMaterial)) return planetIndex;
 	}
-	return GeneratorData->NumberOfPlanets;
+	return ObjectSettings.NumberOfClass;
 }
 
 bool ASpaceNavSystemGenerator::SpawnMarkers()
@@ -264,14 +286,14 @@ bool ASpaceNavSystemGenerator::SpawnMarkers()
 	return true;
 }
 
-TArray<FVector> ASpaceNavSystemGenerator::GenerateOrbitSlots() const
+TArray<FVector> ASpaceNavSystemGenerator::GenerateOrbitSlots(const FSpaceNavObjectGenerationSettings& ObjectSettings) const
 {
-	const double minimumSeparationKm = 2.0 * GeneratorData->MaxPlanetRadiusMeters *
-		GeneratorData->PlanetSpacingMultiplier / MetersPerKm;
+	const double minimumSeparationKm = 2.0 * ObjectSettings.MaxPlanetRadiusMeters *
+		ObjectSettings.PlanetSpacingMultiplier / MetersPerKm;
 	const double jitterKm = minimumSeparationKm * OrbitJitterFraction;
 	const double latticeSpacingKm = minimumSeparationKm + 2.0 * jitterKm;
-	const double minimumRadiusKm = GeneratorData->MinOrbitalRadiusKm + jitterKm;
-	const double maximumRadiusKm = GeneratorData->MaxOrbitalRadiusKm - jitterKm;
+	const double minimumRadiusKm = ObjectSettings.MinOrbitalRadiusKm + jitterKm;
+	const double maximumRadiusKm = ObjectSettings.MaxOrbitalRadiusKm - jitterKm;
 	TArray<FVector> orbitSlots;
 	if (minimumRadiusKm > maximumRadiusKm) return orbitSlots;
 
@@ -285,26 +307,26 @@ TArray<FVector> ASpaceNavSystemGenerator::GenerateOrbitSlots() const
 		const FVector orbitSlotKm(slotIndex.X * latticeSpacingKm, slotIndex.Y * latticeSpacingKm,
 			slotIndex.Z * latticeSpacingKm);
 		if (!IsOrbitSlotAllowed(orbitSlotKm, minimumRadiusKm, maximumRadiusKm,
-			GeneratorData->MinInitialOrbitalPhaseDegrees, GeneratorData->MaxInitialOrbitalPhaseDegrees)) return;
+			ObjectSettings.MinInitialOrbitalPhaseDegrees, ObjectSettings.MaxInitialOrbitalPhaseDegrees)) return;
 		orbitSlots.Add(orbitSlotKm);
 	};
 
-	const int64 randomAttemptCount = static_cast<int64>(GeneratorData->NumberOfPlanets) * RandomSlotAttemptsPerPlanet;
+	const int64 randomAttemptCount = static_cast<int64>(ObjectSettings.NumberOfClass) * RandomSlotAttemptsPerPlanet;
 	for (int64 attemptIndex = 0; attemptIndex < randomAttemptCount &&
-		orbitSlots.Num() < GeneratorData->NumberOfPlanets; ++attemptIndex)
+		orbitSlots.Num() < ObjectSettings.NumberOfClass; ++attemptIndex)
 	{
 		tryAddSlot(FIntVector(randomStream.RandRange(-maximumIndex, maximumIndex),
 			randomStream.RandRange(-maximumIndex, maximumIndex),
 			randomStream.RandRange(-maximumIndex, maximumIndex)));
 	}
 	for (int32 xIndex = -maximumIndex; xIndex <= maximumIndex &&
-		orbitSlots.Num() < GeneratorData->NumberOfPlanets; ++xIndex)
+		orbitSlots.Num() < ObjectSettings.NumberOfClass; ++xIndex)
 	{
 		for (int32 yIndex = -maximumIndex; yIndex <= maximumIndex &&
-			orbitSlots.Num() < GeneratorData->NumberOfPlanets; ++yIndex)
+			orbitSlots.Num() < ObjectSettings.NumberOfClass; ++yIndex)
 		{
 			for (int32 zIndex = -maximumIndex; zIndex <= maximumIndex &&
-				orbitSlots.Num() < GeneratorData->NumberOfPlanets; ++zIndex)
+				orbitSlots.Num() < ObjectSettings.NumberOfClass; ++zIndex)
 			{
 				tryAddSlot(FIntVector(xIndex, yIndex, zIndex));
 			}
@@ -313,14 +335,15 @@ TArray<FVector> ASpaceNavSystemGenerator::GenerateOrbitSlots() const
 	return orbitSlots;
 }
 
-bool ASpaceNavSystemGenerator::SpawnPlanet(FRandomStream& RandomStream, const FVector& LocalOrbitPositionKm,
+bool ASpaceNavSystemGenerator::SpawnPlanet(FRandomStream& RandomStream,
+	const FSpaceNavObjectGenerationSettings& ObjectSettings, const FVector& LocalOrbitPositionKm,
 	double SignedAngularSpeedRadiansPerSecond, bool& bWarnedMissingMaterial)
 {
-	const double massTonnes = SampleRange(RandomStream, GeneratorData->MinPlanetMassTonnes, GeneratorData->MaxPlanetMassTonnes);
-	const double radiusMeters = SampleRange(RandomStream, GeneratorData->MinPlanetRadiusMeters, GeneratorData->MaxPlanetRadiusMeters);
+	const double massTonnes = SampleRange(RandomStream, ObjectSettings.MinPlanetMassTonnes, ObjectSettings.MaxPlanetMassTonnes);
+	const double radiusMeters = SampleRange(RandomStream, ObjectSettings.MinPlanetRadiusMeters, ObjectSettings.MaxPlanetRadiusMeters);
 	const double orbitalRadiusKm = LocalOrbitPositionKm.Size();
 	const double rawPhaseDegrees = FMath::RadiansToDegrees(FMath::Atan2(LocalOrbitPositionKm.Y, LocalOrbitPositionKm.X));
-	const double minimumPhaseDegrees = GeneratorData->MinInitialOrbitalPhaseDegrees;
+	const double minimumPhaseDegrees = ObjectSettings.MinInitialOrbitalPhaseDegrees;
 	const double phaseDegrees = minimumPhaseDegrees + FMath::Fmod(
 		FMath::Fmod(rawPhaseDegrees - minimumPhaseDegrees, 360.0) + 360.0, 360.0);
 	const FQuat orbitRotation = GetActorQuat();
@@ -329,10 +352,10 @@ bool ASpaceNavSystemGenerator::SpawnPlanet(FRandomStream& RandomStream, const FV
 	const FVector localOrbitalVelocity(-LocalOrbitPositionKm.Y * SignedAngularSpeedRadiansPerSecond * MetersPerKm,
 		LocalOrbitPositionKm.X * SignedAngularSpeedRadiansPerSecond * MetersPerKm, 0.0);
 	const FVector orbitalVelocity = orbitRotation.RotateVector(localOrbitalVelocity);
-	UMaterialInterface* selectedMaterial = SelectPlanetMaterial(RandomStream, bWarnedMissingMaterial);
+	UMaterialInterface* selectedMaterial = SelectPlanetMaterial(RandomStream, ObjectSettings, bWarnedMissingMaterial);
 	const FTransform spawnTransform(orbitRotation, planetLocation);
 	ASpaceNavPlanet* planet = GetWorld()->SpawnActorDeferred<ASpaceNavPlanet>(
-		GeneratorData->PlanetClass.Get(), spawnTransform, nullptr, nullptr,
+		ObjectSettings.PlanetClass.Get(), spawnTransform, nullptr, nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (planet == nullptr) return false;
 
@@ -343,13 +366,13 @@ bool ASpaceNavSystemGenerator::SpawnPlanet(FRandomStream& RandomStream, const FV
 }
 
 UMaterialInterface* ASpaceNavSystemGenerator::SelectPlanetMaterial(FRandomStream& RandomStream,
-	bool& bWarnedMissingMaterial) const
+	const FSpaceNavObjectGenerationSettings& ObjectSettings, bool& bWarnedMissingMaterial) const
 {
 	UMaterialInterface* selectedMaterial = nullptr;
-	if (!GeneratorData->PlanetMaterials.IsEmpty())
+	if (!ObjectSettings.PlanetMaterials.IsEmpty())
 	{
-		const int32 materialIndex = RandomStream.RandRange(0, GeneratorData->PlanetMaterials.Num() - 1);
-		selectedMaterial = GeneratorData->PlanetMaterials[materialIndex].Get();
+		const int32 materialIndex = RandomStream.RandRange(0, ObjectSettings.PlanetMaterials.Num() - 1);
+		selectedMaterial = ObjectSettings.PlanetMaterials[materialIndex].Get();
 	}
 	if (selectedMaterial == nullptr && !bWarnedMissingMaterial)
 	{

@@ -11,6 +11,54 @@ class ASpaceNavStartMarker;
 class ASpaceNavTargetMarker;
 class UMaterialInterface;
 
+USTRUCT()
+struct SPACENAVSIM_API FSpaceNavObjectGenerationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Number of Class"))
+	int32 NumberOfClass = 5;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	double PlanetSpacingMultiplier = 3.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	TSubclassOf<ASpaceNavPlanet> PlanetClass;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	TArray<TObjectPtr<UMaterialInterface>> PlanetMaterials;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Min Mass (Tonnes)"))
+	double MinPlanetMassTonnes = 100.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Max Mass (Tonnes)"))
+	double MaxPlanetMassTonnes = 1000.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Min Radius (Meters)"))
+	double MinPlanetRadiusMeters = 100.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Max Radius (Meters)"))
+	double MaxPlanetRadiusMeters = 300.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	double MinOrbitalRadiusKm = 5.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	double MaxOrbitalRadiusKm = 100.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Min Outer Orbit Speed (m/s)"))
+	double MinPlanetOrbitalSpeedMetersPerSecond = 1.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects", meta = (DisplayName = "Max Outer Orbit Speed (m/s)"))
+	double MaxPlanetOrbitalSpeedMetersPerSecond = 5.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	double MinInitialOrbitalPhaseDegrees = 0.0;
+
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	double MaxInitialOrbitalPhaseDegrees = 360.0;
+};
+
 UCLASS()
 class SPACENAVSIM_API USpaceNavSystemGeneratorDataAsset : public UDataAsset
 {
@@ -35,47 +83,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Settings|Central Body")
 	TSubclassOf<ASpaceNavCentralBody> CentralBodyClass;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	int32 NumberOfPlanets = 5;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	double PlanetSpacingMultiplier = 3.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	TSubclassOf<ASpaceNavPlanet> PlanetClass;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	TArray<TObjectPtr<UMaterialInterface>> PlanetMaterials;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Min Mass (Tonnes)"))
-	double MinPlanetMassTonnes = 100.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Max Mass (Tonnes)"))
-	double MaxPlanetMassTonnes = 1000.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Min Radius (Meters)"))
-	double MinPlanetRadiusMeters = 100.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Max Radius (Meters)"))
-	double MaxPlanetRadiusMeters = 300.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	double MinOrbitalRadiusKm = 5.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	double MaxOrbitalRadiusKm = 100.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Min Outer Orbit Speed (m/s)"))
-	double MinPlanetOrbitalSpeedMetersPerSecond = 1.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets", meta = (DisplayName = "Max Outer Orbit Speed (m/s)"))
-	double MaxPlanetOrbitalSpeedMetersPerSecond = 5.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	double MinInitialOrbitalPhaseDegrees = 0.0;
-
-	UPROPERTY(EditAnywhere, Category = "Settings|Planets")
-	double MaxInitialOrbitalPhaseDegrees = 360.0;
+	UPROPERTY(EditAnywhere, Category = "Settings|Objects")
+	TArray<FSpaceNavObjectGenerationSettings> Objects;
 
 	UPROPERTY(EditAnywhere, Category = "Settings|Markers")
 	TSubclassOf<ASpaceNavStartMarker> StartMarkerClass;

@@ -9,6 +9,7 @@ class ASpaceNavCentralBody;
 class ASpaceNavStartMarker;
 class UMaterialInterface;
 struct FRandomStream;
+struct FSpaceNavObjectGenerationSettings;
 
 DECLARE_MULTICAST_DELEGATE(FOnSpaceNavStartZoneReady);
 
@@ -36,15 +37,19 @@ private:
 	bool ValidateSettings() const;
 	bool ValidateSystemSettings() const;
 	bool ValidateCentralBodySettings() const;
-	bool ValidatePlanetSettings() const;
-	bool ValidatePlanetRanges() const;
+	bool ValidateObjectSettings() const;
+	bool ValidateObjectGroupSettings(const FSpaceNavObjectGenerationSettings& ObjectSettings) const;
+	bool ValidateObjectRanges(const FSpaceNavObjectGenerationSettings& ObjectSettings) const;
 	ASpaceNavCentralBody* SpawnCentralBody();
-	int32 SpawnPlanets();
+	bool SpawnObjects();
+	int32 SpawnPlanets(const FSpaceNavObjectGenerationSettings& ObjectSettings, bool& bWarnedMissingMaterial);
 	bool SpawnMarkers();
-	TArray<FVector> GenerateOrbitSlots() const;
-	bool SpawnPlanet(FRandomStream& RandomStream, const FVector& LocalOrbitPositionKm,
+	TArray<FVector> GenerateOrbitSlots(const FSpaceNavObjectGenerationSettings& ObjectSettings) const;
+	bool SpawnPlanet(FRandomStream& RandomStream, const FSpaceNavObjectGenerationSettings& ObjectSettings,
+		const FVector& LocalOrbitPositionKm,
 		double SignedAngularSpeedRadiansPerSecond, bool& bWarnedMissingMaterial);
-	UMaterialInterface* SelectPlanetMaterial(FRandomStream& RandomStream, bool& bWarnedMissingMaterial) const;
+	UMaterialInterface* SelectPlanetMaterial(FRandomStream& RandomStream,
+		const FSpaceNavObjectGenerationSettings& ObjectSettings, bool& bWarnedMissingMaterial) const;
 	void LogGeneration(ELogVerbosity::Type Verbosity, const TCHAR* Message) const;
 
 	UPROPERTY(Transient)
