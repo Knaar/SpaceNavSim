@@ -763,7 +763,12 @@ void USpaceNavRouteComponent::BuildRouteForMode(ERouteMode Mode)
 
 void USpaceNavRouteComponent::MoveRoad()
 {
-	if (AutopilotState.IsValid() || !bRouteReady || GuidancePoints.Num() < 2 || !RoutePool.IsValid()) return;
+	if (AutopilotState.IsValid())
+	{
+		StopMoveRoad();
+		return;
+	}
+	if (!bRouteReady || GuidancePoints.Num() < 2 || !RoutePool.IsValid()) return;
 	const TSharedPtr<FRouteSearchResults, ESPMode::ThreadSafe> launchPool = RoutePool;
 	const FRouteCandidate* selected = FindRouteCandidate(*launchPool, SelectedCandidateIndex);
 	if (selected == nullptr) return;
@@ -1669,6 +1674,17 @@ void USpaceNavRouteComponent::UpdateScriptedPose(ASpaceNavPawn& Pawn,
 		GuidancePoints.Last(), 0.0);
 	flight.Snapshot.SegmentIndex = flight.MotionSegmentIndex + 1;
 	flight.Snapshot.SegmentCount = candidate.MotionSegments.Num();
+}
+
+void USpaceNavRouteComponent::StopMoveRoad()
+{
+	if (!AutopilotState.IsValid()) return;
+	USpaceNavEngineComponent* engine = AutopilotState->Engine.Get();
+	AutopilotState->ExitVelocity = FVector::ZeroVector;
+	if (engine != nullptr) engine->SetScriptedVelocity(FVector::ZeroVector);
+	bRouteReady = false;
+	FinishAutopilot(TEXT("stopped"));
+	if (engine != nullptr) engine->BeginScriptedFlight();
 }
 
 void USpaceNavRouteComponent::FinishAutopilot(const TCHAR* Result)
@@ -4022,10 +4038,29 @@ namespace
 			(Curve.EndPosition - Curve.Control2) * (3.0 * Parameter * Parameter);
 	}
 
+	double CalculateTimeCurveArcLength(const FTimeCurveGeometry& Curve,
+		double StartParameter, double EndParameter)
+	{
+		const double halfInterval = (EndParameter - StartParameter) * 0.5;
+		if (halfInterval <= 0.0) return 0.0;
+		const double midpoint = (StartParameter + EndParameter) * 0.5;
+		const double nearOffset = halfInterval * 0.5384693101056831;
+		const double farOffset = halfInterval * 0.9061798459386640;
+		// Five-point Gauss-Legendre integration of the Bezier derivative magnitude.
+		const double weightedLength = 0.5688888888888889 * EvaluateTimeCurveTangent(Curve, midpoint).Size() +
+			0.4786286704993665 * (EvaluateTimeCurveTangent(Curve, midpoint - nearOffset).Size() +
+				EvaluateTimeCurveTangent(Curve, midpoint + nearOffset).Size()) +
+			0.2369268850561891 * (EvaluateTimeCurveTangent(Curve, midpoint - farOffset).Size() +
+				EvaluateTimeCurveTangent(Curve, midpoint + farOffset).Size());
+		return halfInterval * weightedLength;
+	}
+
 	double FindTimeCurveParameter(const FTimeCurveGeometry& Curve, double DistanceUU)
 	{
 		if (Curve.ArcLengths.Num() < 2) return 0.0;
 		const double distance = FMath::Clamp(DistanceUU, 0.0, Curve.ArcLengths.Last());
+		if (distance <= 0.0) return 0.0;
+		if (distance >= Curve.ArcLengths.Last()) return 1.0;
 		int32 lower = 0;
 		int32 upper = Curve.ArcLengths.Num() - 1;
 		while (upper - lower > 1)
@@ -4035,8 +4070,31 @@ namespace
 			else upper = middle;
 		}
 		const double span = Curve.ArcLengths[upper] - Curve.ArcLengths[lower];
-		const double fraction = span > 0.0 ? (distance - Curve.ArcLengths[lower]) / span : 0.0;
-		return (lower + fraction) / (Curve.ArcLengths.Num() - 1);
+		const double parameterScale = 1.0 / (Curve.ArcLengths.Num() - 1);
+		const double intervalStart = lower * parameterScale;
+		if (span <= 0.0) return intervalStart;
+		const double localDistance = distance - Curve.ArcLengths[lower];
+		double minimumParameter = intervalStart;
+		double maximumParameter = upper * parameterScale;
+		double parameter = FMath::Lerp(minimumParameter, maximumParameter, localDistance / span);
+		double bestParameter = parameter;
+		double bestError = TNumericLimits<double>::Max();
+		const double distanceTolerance = FMath::Max(UE_DOUBLE_SMALL_NUMBER, span * 1.0e-10);
+		for (int32 iteration = 0; iteration < 6; ++iteration)
+		{
+			const double lengthError = CalculateTimeCurveArcLength(Curve, intervalStart, parameter) - localDistance;
+			const double absoluteError = FMath::Abs(lengthError);
+			if (absoluteError < bestError) { bestError = absoluteError; bestParameter = parameter; }
+			if (absoluteError <= distanceTolerance) return parameter;
+			if (lengthError < 0.0) minimumParameter = parameter;
+			else maximumParameter = parameter;
+			const double derivativeSize = EvaluateTimeCurveTangent(Curve, parameter).Size();
+			const double newtonParameter = derivativeSize > UE_DOUBLE_SMALL_NUMBER
+				? parameter - lengthError / derivativeSize : (minimumParameter + maximumParameter) * 0.5;
+			parameter = FMath::IsFinite(newtonParameter) && newtonParameter > minimumParameter &&
+				newtonParameter < maximumParameter ? newtonParameter : (minimumParameter + maximumParameter) * 0.5;
+		}
+		return bestParameter;
 	}
 
 	FScriptedPose EvaluateTimeCurvePose(const FScriptedMotionSegment& Segment, double Seconds)
@@ -4130,14 +4188,13 @@ namespace
 			curve->Control2 = curve->EndPosition - tangents[pointIndex] * handles[pointIndex];
 			curve->ArcLengths.Reserve(ArcIntervals + 1);
 			curve->ArcLengths.Add(0.0);
-			FVector previous = curve->StartPosition;
 			for (int32 interval = 1; interval <= ArcIntervals; ++interval)
 			{
 				const double parameter = static_cast<double>(interval) / ArcIntervals;
-				const FVector position = EvaluateTimeCurvePoint(*curve, parameter);
 				if (EvaluateTimeCurveTangent(*curve, parameter).IsNearlyZero()) return false;
-				curve->ArcLengths.Add(curve->ArcLengths.Last() + FVector::Dist(previous, position));
-				previous = position;
+				const double previousParameter = static_cast<double>(interval - 1) / ArcIntervals;
+				curve->ArcLengths.Add(curve->ArcLengths.Last() +
+					CalculateTimeCurveArcLength(*curve, previousParameter, parameter));
 			}
 			if (curve->ArcLengths.Last() <= UE_DOUBLE_SMALL_NUMBER) return false;
 			OutCurves.Add(curve);
@@ -4215,7 +4272,8 @@ namespace
 				const FVector velocityChange = middleOrientation.UnrotateVector(
 					endTangent * endSpeed - startTangent * startSpeed);
 				FNavigationControl fuel;
-				fuel.ForwardFuel = static_cast<float>(MaxForwardFuelPerSecond * duration);
+				fuel.ForwardFuel = static_cast<float>(FMath::Max(0.0, endSpeed - startSpeed) /
+					Context.Engine.ThrustAcceleration);
 				fuel.RightFuel = static_cast<float>(velocityChange.Y / Context.Engine.ThrustAcceleration);
 				fuel.UpFuel = static_cast<float>(velocityChange.Z / Context.Engine.ThrustAcceleration);
 				fuel.YawFuel = static_cast<float>((yawRate - previousYawRate +

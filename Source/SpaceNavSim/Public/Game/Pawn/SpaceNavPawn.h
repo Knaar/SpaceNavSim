@@ -27,6 +27,33 @@ public:
 	TObjectPtr<USceneComponent> SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> ForwardThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> StrafeLeftThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> StrafeRightThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> StrafeUpThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> StrafeDownThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> YawLeftThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> YawRightThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> PitchUpThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
+	TObjectPtr<USceneComponent> PitchDownThrusterPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")
 	TObjectPtr<UStaticMeshComponent> ShipMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpaceNavPawn|Components")

@@ -17,6 +17,33 @@ ASpaceNavPawn::ASpaceNavPawn()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
+	ForwardThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ForwardThrusterPoint"));
+	ForwardThrusterPoint->SetupAttachment(SceneRoot);
+
+	StrafeLeftThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("StrafeLeftThrusterPoint"));
+	StrafeLeftThrusterPoint->SetupAttachment(SceneRoot);
+
+	StrafeRightThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("StrafeRightThrusterPoint"));
+	StrafeRightThrusterPoint->SetupAttachment(SceneRoot);
+
+	StrafeUpThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("StrafeUpThrusterPoint"));
+	StrafeUpThrusterPoint->SetupAttachment(SceneRoot);
+
+	StrafeDownThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("StrafeDownThrusterPoint"));
+	StrafeDownThrusterPoint->SetupAttachment(SceneRoot);
+
+	YawLeftThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("YawLeftThrusterPoint"));
+	YawLeftThrusterPoint->SetupAttachment(SceneRoot);
+
+	YawRightThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("YawRightThrusterPoint"));
+	YawRightThrusterPoint->SetupAttachment(SceneRoot);
+
+	PitchUpThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("PitchUpThrusterPoint"));
+	PitchUpThrusterPoint->SetupAttachment(SceneRoot);
+
+	PitchDownThrusterPoint = CreateDefaultSubobject<USceneComponent>(TEXT("PitchDownThrusterPoint"));
+	PitchDownThrusterPoint->SetupAttachment(SceneRoot);
+
 	ShipMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShipMesh"));
 	ShipMesh->SetupAttachment(SceneRoot);
 	ShipMesh->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));

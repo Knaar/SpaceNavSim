@@ -70,6 +70,7 @@ private:
 		USpaceNavEngineComponent& Engine, USpaceNavResourceStoreComponent& Resources);
 	void UpdateScriptedPose(ASpaceNavPawn& Pawn, USpaceNavEngineComponent& Engine,
 		USpaceNavResourceStoreComponent& Resources);
+	void StopMoveRoad();
 	void FinishAutopilot(const TCHAR* Result);
 	void CaptureCollisionBodies();
 	void CheckRouteCollision(const FVector& PawnLocation, float DeltaTime,
